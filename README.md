@@ -58,12 +58,13 @@ tools/build-sm7475.sh menuconfig
 
 输出目录：`/home/yukino/project/Realme gtneo5se/out`
 
-- `boot.img`：Android boot header v4，含主线内核 + 空 generic ramdisk
-- `vendor_boot.img`：沿用原厂 vendor ramdisk / ramdisk table / bootconfig，
-  仅替换 DTB 区域为本机主线 DTB，并附带 AVB footer
-- `dtbo.img`：由 `tools/boot/sm7475-dtbo-overlay.dts` 现场编译并封装（24 MiB，
-  与本机匹配的空 overlay），**不是**原厂 dtbo 副本，原因见下文「dtbo 与
-  `__symbols__` 坑」
+- `boot.img`：Android boot header v4，含主线内核 + 空 generic ramdisk，并带
+  本机 cmdline（`console=tty0 ...`，见 `CMDLINE` 环境变量）
+- `vendor_boot.img`：**与原厂逐字节一致**（`--preserve-vendor-boot`）。该机
+  bootloader 拒绝任何 vendor_boot DTB 替换，详见下文
+- `dtbo.img`：由 `tools/boot/sm7475-dtbo-overlay.dts` 现场编译、并加 AVB
+  footer 封装（24 MiB）。它把 `simple-framebuffer` 注入原厂 base DTB 的
+  `/chosen`，是屏幕上能看到日志的关键
 - `Image` / `config` / `sm7475-realme-gt-neo5-se.dtb` / `ramdisk.cpio.gz` /
   `manifest.json` / `payloads.sha256`
 
@@ -75,8 +76,8 @@ AVB 测试密钥首次构建时生成到 `out/keys/`（本机 RSA-4096，**非**
 本机使用标准 **Android boot header v4** 分离方案：
 
 - 内核 `Image` 放在 `boot.img`；
-- DTB 放在 `vendor_boot.img` 的 DTB 区域；
-- 设备的命令行为 bootconfig 提供。
+- DTB 由 bootloader 取自 `vendor_boot.img` 的 DTB 区域（原厂）；
+- 命令行由 boot 头 cmdline + vendor_boot bootconfig + bootloader 追加项合成。
 
 `arch/arm64/configs/sm7475.config` 中与屏幕日志相关的关键项：
 
@@ -89,40 +90,52 @@ CONFIG_FRAMEBUFFER_CONSOLE=y
 # CONFIG_DRM_SIMPLEDRM is not set   # 避免 simpledrm 抢占同一块显存
 ```
 
-设备树 `chosen` 中描述 bootloader 留下的扫描缓冲，由 `simplefb` 接管，
-配合 `console=tty0` 即可在屏幕上看到 `Linux version ...` 与 dmesg 滚动。
+`dtbo` overlay 往原厂 `/chosen` 注入 bootloader 留下的扫描缓冲描述，
+由 `simplefb` 接管；配合 boot 头里的 `console=tty0`，即可在屏幕上看到
+`Linux version ...` 与 dmesg 滚动。
 
-## dtbo 与 `__symbols__` 坑（刷入后「秒回 fastboot」的根因）
+## 刷入后「秒回 fastboot」：bootloader 的三条硬性要求
 
-原厂 `dtbo_a.img` 里装的是 **overlay**（不是完整 DTB），它们通过
-`target = <&label>` 引用 base DTB 里的 **`/__symbols__`** 节点来定位目标。
-原厂 base DTB 位于 `vendor_boot` 的 DTB 区域，顶层带有 `__symbols__`。
+本机 bootloader 校验很严，实测踩到下面三点，任意一条不满足都会**直接放弃
+引导、秒回 fastboot**（每次失败还会把槽位标成 unbootable，见第四点）。
 
-一旦把 DTB 换成 mainline 的 `sm7475-realme-gt-neo5-se.dtb`，它**没有**
-`__symbols__`，overlay 里任何一个 `target = <0xffffffff>` 都无法解析，
-bootloader 执行 `fdt_overlay_apply()` 时会返回 `FDT_ERR_NOTFOUND`：
+### 1) dtbo 分区必须带 AVB footer
 
-- 该 entry 的 `qcom,msm-id` / `qcom,board-id` / `qcom,pmic-id` 与本机完全匹配
-  （Ukee MTP Senna A，`msm-id=591 65536`、`board-id=65544 0`、
-  `pmic-id=47 0 0 0 0 0 0 0 65 65`、`oplus,project-id=22737 22623`），
-  所以 bootloader 一定会选中它；
-- 选中后应用失败 → **直接放弃启动，回落 fastboot**（表现为「秒回 fastboot」）。
+`add_hash_footer` 生成的 footer 只要结构合法即可（实测用本机自签测试密钥也
+能通过），但**完全没有 footer 的 dtbo 会被拒绝**。`make_dtbo()` 因此用
+`avbtool` 生成 dtbo，与 boot/vendor_boot 一致。
 
-**修复**：`tools/boot/sm7475-dtbo-overlay.dts` 用 `target-path = "/"`（而非
-`target = <&label>`）描述一个与本机 id 匹配、内容为空的 overlay，不依赖任何
-`__symbols__`。脚本把它编译成 `dtbo.img` 取代原厂 dtbo，overlay 即可成功
-apply，mainline DTB 原样交给内核。
+### 2) vendor_boot 的 DTB 区域必须与原厂逐字节一致
 
-验证方式（可在本机离线复现）：
+原厂 `vendor_boot` 的 DTB 区域是 **3 份首尾相接的 DTB**（msm-id 分别
+`0x21c` / … / `0x24f`）。实测：**只要替换其中任意一份（哪怕换成同 msm-id、
+合法、带 `__symbols__` 的 DTB）都会秒回 fastboot**；而保留原厂内容、仅重签
+footer 则能正常引导。所以脚本用 `--preserve-vendor-boot`，
+`out/vendor_boot.img` 与原厂完全一致。
 
-```sh
-dtc -I dts -O dtb -o /tmp/noop.dtbo tools/boot/sm7475-dtbo-overlay.dts
-fdtoverlay -i out/sm7475-realme-gt-neo5-se.dtb -o /tmp/merged.dtb /tmp/noop.dtbo
-# 退出码 0 且生成 /tmp/merged.dtb 即为通过
-```
+> 结论：本机**无法**用自建 DTB 替换 vendor_boot 里的设备树。内核需要的额外
+> 节点改由 dtbo overlay 注入（见下一点）。自建的
+> `sm7475-realme-gt-neo5-se.dtb` 仍会被打包进 `out/` 供离线分析，但不参与
+> 真机启动。
 
-> 注意：**必须同时刷入新的 `dtbo.img`**。只换 `boot.img`/`vendor_boot.img`
-> 而保留原厂 dtbo，仍会命中上面这条失败路径并回落 fastboot。
+### 3) overlay 的 fragment 必须用 `target = <&symbol>`
+
+原厂 base DTB 顶层带 `__symbols__`（1439 个符号）。实测 `target-path = "/"`
+**不被支持**，必须写成 `target = <&label>`，由 bootloader 查 `__symbols__`
+解析。原厂 base DTB 里有 `chosen = "/chosen"`，故
+`tools/boot/sm7475-dtbo-overlay.dts` 用 `target = <&chosen>` 把
+`simple-framebuffer` 注入 `/chosen`。
+
+### 4) 槽位 unbootable 循环
+
+mainline 内核没有 Android 用户态，无法把槽位标记为「成功引导」，bootloader
+在数十秒后用看门狗复位并**把该槽标成 `slot-unbootable`**；此后
+`fastboot reboot` 不再尝试引导，直接回 fastboot。所以**每次刷完都要先**
+`fastboot set_active a` 清标记再 `fastboot reboot`。用
+`fastboot getvar slot-unbootable:a` 可确认（须为 `no` 才引导）。
+
+> 另：刷入失败时若 `fastboot getvar` / `oem device-info` 卡住不返回但
+> `fastboot devices` 仍能列出设备，是 fastboot 控制通道坏了，**拔插 USB**即可。
 
 ## 测试与回滚
 

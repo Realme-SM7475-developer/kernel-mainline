@@ -2,34 +2,42 @@
 /*
  * SM7475 / Realme GT Neo5 SE (RMX3700) 专用 dtbo overlay。
  *
- * 为什么需要它：
- *   原厂 dtbo 里的 overlay 是相对原厂 base DTB 做的差分补丁——409 个
- *   fragment，target 全是 <&label>，依赖 base DTB 的 /__symbols__ 节点
- *   在启动时解析。mainline 的 DTB 是一棵独立完整的设备树，没有这些符号，
- *   bootloader 执行 fdt_overlay_apply() 会直接 FDT_ERR_NOTFOUND 失败，
- *   于是放弃启动内核、立刻回到 fastboot（即"秒回 fastboot"）。
+ * 为什么不用自建 DTB：实测该机 bootloader 只接受「与原厂逐字节一致」的
+ * vendor_boot DTB 区域，任何替换（哪怕只换其中一份 DTB）都会直接放弃引导、
+ * 秒回 fastboot。所以 vendor_boot 保持原厂原样，我们只通过 dtbo overlay
+ * 往原厂 base DTB 里注入内核需要的节点（这里是 simple-framebuffer）。
  *
- * 因此这里提供与本机 msm-id / board-id / pmic-id 完全匹配、但内容为空的
- * overlay：bootloader 能选中并成功应用它，mainline DTB 原样交给内核，
- * 原来的叠加动作不再发生。
+ * 两个实测要点：
+ *  1. dtbo 分区必须带 AVB footer（add_hash_footer），否则 bootloader 拒绝；
+ *  2. overlay 的 fragment 必须用 target = <&symbol> 引用原厂 base DTB 的
+ *     /__symbols__；实测 target-path = "/" 不被支持。
+ *     原厂 base DTB 里 chosen = "/chosen"，故用 <&chosen>。
  */
 /dts-v1/;
 /plugin/;
 
 / {
-	/* 与设备 DTB、原厂 overlay 的匹配属性保持一致，确保能被选中 */
+	/* 与原厂 overlay 的匹配属性保持一致，确保能被选中 */
+	qcom,pmic-id = <47 0 0 0 0 0 0 0 65 65>;
+	qcom,pmic-id-size = <10>;
+	model = "Qualcomm Technologies, Inc. Ukee MTP, Senna A";
+	compatible = "qcom,ukee-mtp", "qcom,ukee", "qcom,mtp";
 	qcom,msm-id = <0x24f 0x10000>;
 	qcom,board-id = <0x10008 0>;
-	qcom,pmic-id-size = <10>;
-	qcom,pmic-id = <47 0 0 0 0 0 0 0 65 65>;
 	oplus,project-id = <22737 22623>;
 
+	/* 往原厂 /chosen 里塞入 simple-framebuffer，让 simplefb 接管开机 logo
+	 * 所在的扫描缓冲，从而在内核启动早期就能在屏幕上看到 dmesg。 */
 	fragment@0 {
-		/* 用 target-path 而非 target = <&label>，无需 base 的 __symbols__ */
-		target-path = "/";
+		target = <&chosen>;
 		__overlay__ {
-			mainline-dtbo-placeholder {
-				compatible = "mainline,dtbo-placeholder";
+			framebuffer@b8000000 {
+				compatible = "simple-framebuffer";
+				reg = <0x0 0xb8000000 0x0 0x2b00000>;
+				width = <1240>;
+				height = <2772>;
+				stride = <4960>;
+				format = "a8r8g8b8";
 			};
 		};
 	};

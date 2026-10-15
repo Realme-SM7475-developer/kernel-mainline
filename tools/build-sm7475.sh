@@ -59,6 +59,10 @@ DTBO_PARTITION_SIZE="${DTBO_PARTITION_SIZE:-25165824}"
 
 DTBO_OVERLAY="$KERNEL_ROOT/tools/boot/sm7475-dtbo-overlay.dts"
 
+# 内核命令行：v4 下写在 boot 头里，bootloader 会再追加 bootconfig / oplusboot 等。
+# console=tty0 让 simplefb 的 framebuffer console 接管屏幕输出。
+CMDLINE="${CMDLINE:-console=tty0 console=ttyMSM0,115200n8 loglevel=8 ignore_loglevel}"
+
 BOARD="sm7475-realme-gt-neo5-se"
 O_DIR="$BUILD_ROOT/kbuild"
 KEY_DIR="$OUT_DIR/keys"
@@ -154,6 +158,10 @@ make_dtbo() {
 	if [ ! -x "$dtc" ]; then dtc="$(command -v dtc || true)"; fi
 	[ -n "$dtc" ] && [ -x "$dtc" ] || die "找不到 dtc（请先编译内核）"
 	need "$DTBO_OVERLAY"
+	# dtbo 分区同样要有 AVB footer：实测缺 footer 时 bootloader 直接拒绝引导
+	# （表现就是「秒回 fastboot」），而带 footer 即使非原厂密钥也能通过。
+	local key="$KEY_DIR/boot.key"
+	need "$key"
 	# 先写到 BUILD_ROOT：打包脚本会清空 OUT_DIR 下的 *.img 再重新落盘，
 	# 若直接生成在 OUT_DIR 会被它自己删掉。
 	local out="$BUILD_ROOT/dtbo.img"
@@ -161,7 +169,10 @@ make_dtbo() {
 	"$dtc" -I dts -O dtb -o "$BUILD_ROOT/dtbo-noop.dtbo" "$DTBO_OVERLAY"
 	python3 "$MKDTBOIMG" create "$out" \
 		--page_size=4096 "$BUILD_ROOT/dtbo-noop.dtbo"
-	truncate -s "$DTBO_PARTITION_SIZE" "$out"
+	# add_hash_footer 会顺带把镜像补齐到分区大小并写入 AVBf/AVB0，勿再 truncate
+	"$AVBTOOL" add_hash_footer --image "$out" \
+		--partition_name dtbo --partition_size "$DTBO_PARTITION_SIZE" \
+		--algorithm SHA256_RSA4096 --key "$key" >/dev/null
 	echo "$out"
 }
 
@@ -177,6 +188,9 @@ package() {
 	krel="$(cat "$O_DIR/include/config/kernel.release" 2>/dev/null || echo unknown)"
 
 	log "打包 Android v4 镜像 -> $OUT_DIR（母本: 原厂 dump）"
+	# vendor_boot 保持原厂逐字节一致：该机 bootloader 拒绝任何 vendor_boot
+	# DTB 替换（哪怕只换其中一份 DTB 也会秒回 fastboot），所以用
+	# --preserve-vendor-boot，并且不能再给它加自签 footer。
 	python3 "$BUILD_SRC/tools/boot/build_mainline_images.py" \
 		--mkbootimg "$MKBOOTIMG" \
 		--base-boot "$BASE_BOOT" \
@@ -187,9 +201,10 @@ package() {
 		--ramdisk "$ramdisk" \
 		--dtb "$dtb" \
 		--dtbo "$dtbo" \
+		--cmdline "$CMDLINE" \
+		--preserve-vendor-boot \
 		--avbtool "$AVBTOOL" \
 		--boot-avb-key "$KEY_DIR/boot.key" \
-		--vendor-avb-key "$KEY_DIR/vendor.key" \
 		--output-dir "$OUT_DIR" >/dev/null
 	log "完成，产物："
 	ls -lh "$OUT_DIR"/boot.img "$OUT_DIR"/vendor_boot.img "$OUT_DIR"/dtbo.img
