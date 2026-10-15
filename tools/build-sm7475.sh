@@ -7,9 +7,15 @@
 #   1. 使用本机专用配置 arch/arm64/configs/sm7475.config（与 arm64 defconfig 合并），
 #      不污染通用配置；
 #   2. 编译 arm64 内核（clang/LLVM）与该机器的 DTB；
-#   3. 生成符合 Android 启动链的 boot.img 与 vendor_boot.img（Android boot
-#      header v4：内核在 boot.img，DTB 在 vendor_boot.img 的 DTB 区域）；
+#   3. 生成符合 Android 启动链的 boot.img、vendor_boot.img 与 dtbo.img
+#      （Android boot header v4：内核在 boot.img，DTB 在 vendor_boot.img
+#      的 DTB 区域）；
 #   4. 所有产物统一输出到 <项目根>/out。
+#
+# 关于 dtbo：原厂 dtbo 的 overlay 依赖原厂 base DTB 的 /__symbols__，mainline
+# DTB 没有这些符号，bootloader 应用 overlay 会 FDT_ERR_NOTFOUND 失败并直接
+# 回落 fastboot。所以这里改为打包一个与本机匹配的空 overlay
+# （tools/boot/sm7475-dtbo-overlay.dts），保证启动链能走通。
 #
 # 关于路径空格：Linux kbuild 明确拒绝含空格的源码路径
 # （Makefile: "source directory cannot contain spaces or colons"）。
@@ -25,7 +31,7 @@
 #   tools/build-sm7475.sh sync         # 只同步源码
 #
 # 可用环境变量覆盖：OUT_DIR BUILD_ROOT JOBS CLANG_DIR MKBOOTIMG AVBTOOL
-#                   BASE_BOOT BASE_VENDOR_BOOT DTBO
+#                   MKDTBOIMG BASE_BOOT BASE_VENDOR_BOOT DTBO_PARTITION_SIZE
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,11 +48,16 @@ ARCH="${ARCH:-arm64}"
 CLANG_DIR="${CLANG_DIR:-/home/yukino/project/android/los23.2/prebuilts/clang/host/linux-x86/clang-r574158}"
 MKBOOTIMG="${MKBOOTIMG:-/home/yukino/project/android/los23.2/system/tools/mkbootimg/mkbootimg.py}"
 AVBTOOL="${AVBTOOL:-/home/yukino/project/android/los23.2/prebuilts/kernel-build-tools/linux-x86/bin/avbtool}"
+MKDTBOIMG="${MKDTBOIMG:-/home/yukino/project/android/los23.2/system/libufdt/utils/src/mkdtboimg.py}"
 
 # 原厂 dump：作为 boot/vendor_boot 的封装母本，沿用其 vendor ramdisk/table/bootconfig
 BASE_BOOT="${BASE_BOOT:-$PROJECT_ROOT/mainline/prebulit/boot_a.img}"
 BASE_VENDOR_BOOT="${BASE_VENDOR_BOOT:-$PROJECT_ROOT/mainline/prebulit/vendor_boot_a.img}"
-DTBO="${DTBO:-$PROJECT_ROOT/mainline/prebulit/dtbo_a.img}"
+
+# dtbo 分区实际大小（0x1800000 = 24 MiB），打包时补齐，避免只覆盖分区开头
+DTBO_PARTITION_SIZE="${DTBO_PARTITION_SIZE:-25165824}"
+
+DTBO_OVERLAY="$KERNEL_ROOT/tools/boot/sm7475-dtbo-overlay.dts"
 
 BOARD="sm7475-realme-gt-neo5-se"
 O_DIR="$BUILD_ROOT/kbuild"
@@ -57,7 +68,7 @@ export ARCH
 export PATH="$CLANG_DIR/bin:$PATH"
 MAKE=(make -C "$BUILD_SRC" LLVM=1 O="$O_DIR")
 
-log()  { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
+log()  { printf '\033[1;32m==>\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 need() { [ -e "$1" ] || die "缺少文件: $1"; }
 
@@ -65,9 +76,10 @@ need "$KERNEL_ROOT/$FRAGMENT_REL"
 need "$CLANG_DIR/bin/clang"
 need "$MKBOOTIMG"
 need "$AVBTOOL"
+need "$MKDTBOIMG"
 need "$BASE_BOOT"
 need "$BASE_VENDOR_BOOT"
-need "$DTBO"
+need "$DTBO_OVERLAY"
 mkdir -p "$OUT_DIR" "$BUILD_ROOT"
 
 # ---------------------------------------------------------------------------
@@ -129,14 +141,35 @@ make_ramdisk() {
 	echo "$OUT_DIR/ramdisk.cpio.gz"
 }
 
+make_dtbo() {
+	# 编译与本机匹配的空 overlay，打成 Android dtbo 分区镜像。
+	# 原厂 overlay 依赖原厂 base DTB 的 /__symbols__，mainline DTB 没有这些
+	# 符号，bootloader apply 时会 FDT_ERR_NOTFOUND 失败并直接回落 fastboot；
+	# 换成不依赖符号（target-path）的空 overlay，启动链即可走通。
+	local dtc="$O_DIR/scripts/dtc/dtc"
+	if [ ! -x "$dtc" ]; then dtc="$(command -v dtc || true)"; fi
+	[ -n "$dtc" ] && [ -x "$dtc" ] || die "找不到 dtc（请先编译内核）"
+	need "$DTBO_OVERLAY"
+	# 先写到 BUILD_ROOT：打包脚本会清空 OUT_DIR 下的 *.img 再重新落盘，
+	# 若直接生成在 OUT_DIR 会被它自己删掉。
+	local out="$BUILD_ROOT/dtbo.img"
+	log "生成 dtbo overlay -> $out"
+	"$dtc" -I dts -O dtb -o "$BUILD_ROOT/dtbo-noop.dtbo" "$DTBO_OVERLAY"
+	python3 "$MKDTBOIMG" create "$out" \
+		--page_size=4096 "$BUILD_ROOT/dtbo-noop.dtbo"
+	truncate -s "$DTBO_PARTITION_SIZE" "$out"
+	echo "$out"
+}
+
 package() {
 	local image="$O_DIR/arch/$ARCH/boot/Image"
 	local dtb="$O_DIR/arch/$ARCH/boot/dts/qcom/$BOARD.dtb"
 	need "$image"
 	need "$dtb"
 	make_keys
-	local ramdisk krel
+	local ramdisk dtbo krel
 	ramdisk="$(make_ramdisk)"
+	dtbo="$(make_dtbo)"
 	krel="$(cat "$O_DIR/include/config/kernel.release" 2>/dev/null || echo unknown)"
 
 	log "打包 Android v4 镜像 -> $OUT_DIR（母本: 原厂 dump）"
@@ -149,7 +182,7 @@ package() {
 		--kernel-release "$krel" \
 		--ramdisk "$ramdisk" \
 		--dtb "$dtb" \
-		--dtbo "$DTBO" \
+		--dtbo "$dtbo" \
 		--avbtool "$AVBTOOL" \
 		--boot-avb-key "$KEY_DIR/boot.key" \
 		--vendor-avb-key "$KEY_DIR/vendor.key" \

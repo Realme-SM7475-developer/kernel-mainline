@@ -19,8 +19,9 @@ SM7475 / Snapdragon 7+ Gen 2）** 做早期 bring-up 适配，并提供一条命
 | `arch/arm64/boot/dts/qcom/sm7475-realme-gt-neo5-se-simplefb-overlay.dts` | 在完整 vendor DTB 上叠加 simplefb 的 overlay |
 | `drivers/pinctrl/qcom/pinctrl-cape.*` | Cape(SM7475) TLMM pinctrl 驱动 |
 | `drivers/clk/qcom/gcc-sm8450.c` | 复用 SM8450 GCC 并加入 Cape/SM7475 支持 |
-| `tools/build-sm7475.sh` | **构建入口脚本**（编译内核 + 生成 boot/vendor_boot） |
+| `tools/build-sm7475.sh` | **构建入口脚本**（编译内核 + 生成 boot/vendor_boot/dtbo） |
 | `tools/boot/build_mainline_images.py` | Android v4 boot/vendor_boot 封装工具 |
+| `tools/boot/sm7475-dtbo-overlay.dts` | 本机 dtbo 用的空 overlay（绕过原厂 `/__symbols__` 依赖，见下文） |
 
 ## 依赖
 
@@ -30,7 +31,8 @@ SM7475 / Snapdragon 7+ Gen 2）** 做早期 bring-up 适配，并提供一条命
   `/home/yukino/project/android/los23.2/prebuilts/clang/host/linux-x86/clang-r574158`
 - `mkbootimg.py`：`/home/yukino/project/android/los23.2/system/tools/mkbootimg/mkbootimg.py`
 - `avbtool`：`/home/yukino/project/android/los23.2/prebuilts/kernel-build-tools/linux-x86/bin/avbtool`
-- 原厂 dump（镜像母本）：`../mainline/prebulit/{boot_a.img,vendor_boot_a.img,dtbo_a.img}`
+- `mkdtboimg.py`：`/home/yukino/project/android/los23.2/system/libufdt/utils/src/mkdtboimg.py`
+- 原厂 dump（镜像母本）：`../mainline/prebulit/{boot_a.img,vendor_boot_a.img}`
 
 > **路径空格说明**：Linux kbuild 明确拒绝含空格的源码路径
 > （`Makefile`: *source directory cannot contain spaces or colons*）。
@@ -59,7 +61,9 @@ tools/build-sm7475.sh menuconfig
 - `boot.img`：Android boot header v4，含主线内核 + 空 generic ramdisk
 - `vendor_boot.img`：沿用原厂 vendor ramdisk / ramdisk table / bootconfig，
   仅替换 DTB 区域为本机主线 DTB，并附带 AVB footer
-- `dtbo.img`：原厂 DTBO 副本
+- `dtbo.img`：由 `tools/boot/sm7475-dtbo-overlay.dts` 现场编译并封装（24 MiB，
+  与本机匹配的空 overlay），**不是**原厂 dtbo 副本，原因见下文「dtbo 与
+  `__symbols__` 坑」
 - `Image` / `config` / `sm7475-realme-gt-neo5-se.dtb` / `ramdisk.cpio.gz` /
   `manifest.json` / `payloads.sha256`
 
@@ -87,6 +91,38 @@ CONFIG_FRAMEBUFFER_CONSOLE=y
 
 设备树 `chosen` 中描述 bootloader 留下的扫描缓冲，由 `simplefb` 接管，
 配合 `console=tty0` 即可在屏幕上看到 `Linux version ...` 与 dmesg 滚动。
+
+## dtbo 与 `__symbols__` 坑（刷入后「秒回 fastboot」的根因）
+
+原厂 `dtbo_a.img` 里装的是 **overlay**（不是完整 DTB），它们通过
+`target = <&label>` 引用 base DTB 里的 **`/__symbols__`** 节点来定位目标。
+原厂 base DTB 位于 `vendor_boot` 的 DTB 区域，顶层带有 `__symbols__`。
+
+一旦把 DTB 换成 mainline 的 `sm7475-realme-gt-neo5-se.dtb`，它**没有**
+`__symbols__`，overlay 里任何一个 `target = <0xffffffff>` 都无法解析，
+bootloader 执行 `fdt_overlay_apply()` 时会返回 `FDT_ERR_NOTFOUND`：
+
+- 该 entry 的 `qcom,msm-id` / `qcom,board-id` / `qcom,pmic-id` 与本机完全匹配
+  （Ukee MTP Senna A，`msm-id=591 65536`、`board-id=65544 0`、
+  `pmic-id=47 0 0 0 0 0 0 0 65 65`、`oplus,project-id=22737 22623`），
+  所以 bootloader 一定会选中它；
+- 选中后应用失败 → **直接放弃启动，回落 fastboot**（表现为「秒回 fastboot」）。
+
+**修复**：`tools/boot/sm7475-dtbo-overlay.dts` 用 `target-path = "/"`（而非
+`target = <&label>`）描述一个与本机 id 匹配、内容为空的 overlay，不依赖任何
+`__symbols__`。脚本把它编译成 `dtbo.img` 取代原厂 dtbo，overlay 即可成功
+apply，mainline DTB 原样交给内核。
+
+验证方式（可在本机离线复现）：
+
+```sh
+dtc -I dts -O dtb -o /tmp/noop.dtbo tools/boot/sm7475-dtbo-overlay.dts
+fdtoverlay -i out/sm7475-realme-gt-neo5-se.dtb -o /tmp/merged.dtb /tmp/noop.dtbo
+# 退出码 0 且生成 /tmp/merged.dtb 即为通过
+```
+
+> 注意：**必须同时刷入新的 `dtbo.img`**。只换 `boot.img`/`vendor_boot.img`
+> 而保留原厂 dtbo，仍会命中上面这条失败路径并回落 fastboot。
 
 ## 测试与回滚
 
