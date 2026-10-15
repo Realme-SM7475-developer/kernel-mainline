@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+/dts-v1/;
+/plugin/;
+
+/* Keep the complete vendor DTB and expose only the bootloader scanout buffer. */
+&{/chosen} {
+	#address-cells = <2>;
+	#size-cells = <2>;
+	/* Keep early boot on the known-good vendor console path. */
+	bootargs = "console=tty0 console=ttyMSM0,115200n8 panic=0 loglevel=8 ignore_loglevel initcall_debug printk.time=1 fbcon=map:0 kpti=0 log_buf_len=2M swiotlb=noforce loop.max_part=7 cgroup.memory=nokmem,nosocket pcie_ports=compat msm_rtb.filter=0x237 allow_mismatched_32bit_el0 kasan=off rcupdate.rcu_expedited=1 rcu_nocbs=0-7 ftrace_dump_on_oops pstore.compress=none cpufreq.default_governor=performance can.stats_timer=0 fsa4480_i2c.async_probe=1 slub_debug=- disable_dma32=on";
+	framebuffer@b8000000 {
+		compatible = "simple-framebuffer";
+		reg = <0x0 0xb8000000 0x0 0x2b00000>;
+		width = <1240>;
+		height = <2772>;
+		stride = <(1240 * 4)>;
+		format = "a8r8g8b8";
+	};
+};

@@ -1072,6 +1072,18 @@ static const struct freq_tbl sm8475_ftbl_gcc_ufs_phy_axi_clk_src[] = {
 	{ }
 };
 
+/* Cape sources the 850 MHz UFS rate from GPLL3, unlike SM8475. */
+static const struct freq_tbl cape_ftbl_gcc_ufs_phy_axi_clk_src[] = {
+	F(25000000, P_GCC_GPLL0_OUT_EVEN, 12, 0, 0),
+	F(75000000, P_GCC_GPLL0_OUT_EVEN, 4, 0, 0),
+	F(150000000, P_GCC_GPLL0_OUT_MAIN, 4, 0, 0),
+	F(300000000, P_GCC_GPLL0_OUT_MAIN, 2, 0, 0),
+	F(600000000, P_GCC_GPLL0_OUT_MAIN, 1, 0, 0),
+	F(806400000, P_SM8475_GCC_GPLL2_OUT_EVEN, 1, 0, 0),
+	F(850000000, P_SM8475_GCC_GPLL3_OUT_EVEN, 1, 0, 0),
+	{ }
+};
+
 static struct clk_init_data sm8475_gcc_ufs_phy_axi_clk_src_init = {
 	.name = "gcc_ufs_phy_axi_clk_src",
 	.parent_data = sm8475_gcc_parent_data_3,
@@ -1111,6 +1123,16 @@ static const struct freq_tbl sm8475_ftbl_gcc_ufs_phy_ice_core_clk_src[] = {
 	F(600000000, P_GCC_GPLL0_OUT_MAIN, 1, 0, 0),
 	F(806400000, P_SM8475_GCC_GPLL2_OUT_EVEN, 1, 0, 0),
 	F(850000000, P_SM8475_GCC_GPLL2_OUT_EVEN, 1, 0, 0),
+	{ }
+};
+
+static const struct freq_tbl cape_ftbl_gcc_ufs_phy_ice_core_clk_src[] = {
+	F(75000000, P_GCC_GPLL0_OUT_EVEN, 4, 0, 0),
+	F(150000000, P_GCC_GPLL0_OUT_MAIN, 4, 0, 0),
+	F(300000000, P_GCC_GPLL0_OUT_MAIN, 2, 0, 0),
+	F(600000000, P_GCC_GPLL0_OUT_MAIN, 1, 0, 0),
+	F(806400000, P_SM8475_GCC_GPLL2_OUT_EVEN, 1, 0, 0),
+	F(850000000, P_SM8475_GCC_GPLL3_OUT_EVEN, 1, 0, 0),
 	{ }
 };
 
@@ -3405,6 +3427,7 @@ static const struct qcom_cc_desc gcc_sm8450_desc = {
 static const struct of_device_id gcc_sm8450_match_table[] = {
 	{ .compatible = "qcom,gcc-sm8450" },
 	{ .compatible = "qcom,sm8475-gcc" },
+	{ .compatible = "qcom,cape-gcc" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, gcc_sm8450_match_table);
@@ -3412,6 +3435,7 @@ MODULE_DEVICE_TABLE(of, gcc_sm8450_match_table);
 static int gcc_sm8450_probe(struct platform_device *pdev)
 {
 	struct regmap *regmap;
+	bool cape = of_device_is_compatible(pdev->dev.of_node, "qcom,cape-gcc");
 	int ret;
 
 	regmap = qcom_cc_map(pdev, &gcc_sm8450_desc);
@@ -3423,7 +3447,7 @@ static int gcc_sm8450_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	if (of_device_is_compatible(pdev->dev.of_node, "qcom,sm8475-gcc")) {
+	if (cape || of_device_is_compatible(pdev->dev.of_node, "qcom,sm8475-gcc")) {
 		/* Update GCC PLL0 */
 		gcc_gpll0.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_LUCID_OLE];
 		gcc_gpll0.clkr.hw.init = &sm8475_gcc_gpll0_init;
@@ -3454,6 +3478,14 @@ static int gcc_sm8450_probe(struct platform_device *pdev)
 
 		gcc_sm8450_desc.clks[SM8475_GCC_GPLL2] = &sm8475_gcc_gpll2.clkr;
 		gcc_sm8450_desc.clks[SM8475_GCC_GPLL3] = &sm8475_gcc_gpll3.clkr;
+
+		if (cape) {
+			gcc_ufs_phy_axi_clk_src.freq_tbl = cape_ftbl_gcc_ufs_phy_axi_clk_src;
+			gcc_ufs_phy_ice_core_clk_src.freq_tbl =
+				cape_ftbl_gcc_ufs_phy_ice_core_clk_src;
+			gcc_ufs_phy_unipro_core_clk_src.freq_tbl =
+				cape_ftbl_gcc_ufs_phy_ice_core_clk_src;
+		}
 	}
 
 	/* FORCE_MEM_CORE_ON for ufs phy ice core clocks */
@@ -3491,5 +3523,5 @@ static void __exit gcc_sm8450_exit(void)
 }
 module_exit(gcc_sm8450_exit);
 
-MODULE_DESCRIPTION("QTI GCC SM8450 / SM8475 Driver");
+MODULE_DESCRIPTION("QTI GCC SM8450 / SM8475 / Cape Driver");
 MODULE_LICENSE("GPL v2");

@@ -15,6 +15,16 @@ config PINCTRL_APQ8084
 	  This is the pinctrl, pinmux, pinconf and gpiolib driver for the
 	  Qualcomm TLMM block found in the Qualcomm APQ8084 platform.
 
+config PINCTRL_CAPE
+	tristate "Qualcomm Cape pin controller driver"
+	depends on ARM64 || COMPILE_TEST
+	default ARCH_QCOM
+	help
+	  This is the pinctrl, pinmux, pinconf and gpiolib driver for the
+	  Qualcomm Cape TLMM block, also used by the Ukee (SM7475) variant.
+	  Enable this to configure GPIOs and peripheral pin functions on
+	  devices using these SoCs.
+
 config PINCTRL_GLYMUR
 	tristate "Qualcomm Technologies Inc Glymur pin controller driver"
 	depends on ARM64 || COMPILE_TEST

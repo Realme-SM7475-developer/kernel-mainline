@@ -1,0 +1,351 @@
+// SPDX-License-Identifier: BSD-3-Clause
+
+#include <dt-bindings/clock/qcom,sm7475-gcc.h>
+#include <dt-bindings/clock/qcom,rpmh.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/soc/qcom,rpmh-rsc.h>
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+	interrupt-parent = <&intc>;
+
+	chosen { };
+
+	clocks {
+		xo_board: xo-board {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <76800000>;
+		};
+
+		sleep_clk: sleep-clk {
+			compatible = "fixed-clock";
+			#clock-cells = <0>;
+			clock-frequency = <32000>;
+		};
+	};
+
+	cpus {
+		#address-cells = <2>;
+		#size-cells = <0>;
+
+		cpu0: cpu@0 {
+			compatible = "qcom,kryo";
+			device_type = "cpu";
+			reg = <0 0x000>;
+			enable-method = "psci";
+			power-domains = <&cpu_pd0>;
+			power-domain-names = "psci";
+		};
+
+		cpu1: cpu@100 {
+			compatible = "qcom,kryo";
+			device_type = "cpu";
+			reg = <0 0x100>;
+			enable-method = "psci";
+			power-domains = <&cpu_pd1>;
+			power-domain-names = "psci";
+		};
+
+		cpu2: cpu@200 {
+			compatible = "qcom,kryo";
+			device_type = "cpu";
+			reg = <0 0x200>;
+			enable-method = "psci";
+			power-domains = <&cpu_pd2>;
+			power-domain-names = "psci";
+		};
+
+		cpu3: cpu@300 {
+			compatible = "qcom,kryo";
+			device_type = "cpu";
+			reg = <0 0x300>;
+			enable-method = "psci";
+			power-domains = <&cpu_pd3>;
+			power-domain-names = "psci";
+		};
+
+		cpu4: cpu@400 {
+			compatible = "qcom,kryo";
+			device_type = "cpu";
+			reg = <0 0x400>;
+			enable-method = "psci";
+			power-domains = <&cpu_pd4>;
+			power-domain-names = "psci";
+		};
+
+		cpu5: cpu@500 {
+			compatible = "qcom,kryo";
+			device_type = "cpu";
+			reg = <0 0x500>;
+			enable-method = "psci";
+			power-domains = <&cpu_pd5>;
+			power-domain-names = "psci";
+		};
+
+		cpu6: cpu@600 {
+			compatible = "qcom,kryo";
+			device_type = "cpu";
+			reg = <0 0x600>;
+			enable-method = "psci";
+			power-domains = <&cpu_pd6>;
+			power-domain-names = "psci";
+		};
+
+		cpu7: cpu@700 {
+			compatible = "qcom,kryo";
+			device_type = "cpu";
+			reg = <0 0x700>;
+			enable-method = "psci";
+			power-domains = <&cpu_pd7>;
+			power-domain-names = "psci";
+		};
+
+		cpu-map {
+			cluster0 {
+				core0 { cpu = <&cpu0>; };
+				core1 { cpu = <&cpu1>; };
+				core2 { cpu = <&cpu2>; };
+				core3 { cpu = <&cpu3>; };
+			};
+			cluster1 {
+				core0 { cpu = <&cpu4>; };
+				core1 { cpu = <&cpu5>; };
+				core2 { cpu = <&cpu6>; };
+			};
+			cluster2 {
+				core0 { cpu = <&cpu7>; };
+			};
+		};
+	};
+
+	/* The Ukee bootloader fills the installed RAM banks. */
+	memory {
+		device_type = "memory";
+		reg = <0 0 0 0>;
+	};
+
+	psci {
+		compatible = "arm,psci-1.0";
+		method = "smc";
+
+		cpu_pd0: power-domain-cpu0 {
+			#power-domain-cells = <0>;
+			power-domains = <&cluster_pd>;
+		};
+		cpu_pd1: power-domain-cpu1 {
+			#power-domain-cells = <0>;
+			power-domains = <&cluster_pd>;
+		};
+		cpu_pd2: power-domain-cpu2 {
+			#power-domain-cells = <0>;
+			power-domains = <&cluster_pd>;
+		};
+		cpu_pd3: power-domain-cpu3 {
+			#power-domain-cells = <0>;
+			power-domains = <&cluster_pd>;
+		};
+		cpu_pd4: power-domain-cpu4 {
+			#power-domain-cells = <0>;
+			power-domains = <&cluster_pd>;
+		};
+		cpu_pd5: power-domain-cpu5 {
+			#power-domain-cells = <0>;
+			power-domains = <&cluster_pd>;
+		};
+		cpu_pd6: power-domain-cpu6 {
+			#power-domain-cells = <0>;
+			power-domains = <&cluster_pd>;
+		};
+		cpu_pd7: power-domain-cpu7 {
+			#power-domain-cells = <0>;
+			power-domains = <&cluster_pd>;
+		};
+		cluster_pd: power-domain-cluster {
+			#power-domain-cells = <0>;
+		};
+	};
+
+	reserved-memory {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		memory@80000000 { reg = <0 0x80000000 0 0x600000>; no-map; };
+		memory@80600000 { reg = <0 0x80600000 0 0x40000>; no-map; };
+		memory@80640000 { reg = <0 0x80640000 0 0x1c0000>; no-map; };
+		memory@80800000 { reg = <0 0x80800000 0 0x60000>; no-map; };
+		cmd_db: memory@80860000 {
+			compatible = "qcom,cmd-db";
+			reg = <0 0x80860000 0 0x20000>;
+			no-map;
+		};
+		memory@80880000 { reg = <0 0x80880000 0 0x20000>; no-map; };
+		memory@808a0000 { reg = <0 0x808a0000 0 0x40000>; no-map; };
+		memory@808e0000 { reg = <0 0x808e0000 0 0x4000>; no-map; };
+		memory@808e4000 { reg = <0 0x808e4000 0 0x10000>; no-map; };
+		smem: memory@80900000 {
+			compatible = "qcom,smem";
+			reg = <0 0x80900000 0 0x200000>;
+			hwlocks = <&tcsr_mutex 3>;
+			no-map;
+		};
+		memory@80b00000 { reg = <0 0x80b00000 0 0x100000>; no-map; };
+		memory@80c00000 { reg = <0 0x80c00000 0 0x100000>; no-map; };
+		memory@85700000 { reg = <0 0x85700000 0 0x2800000>; no-map; };
+		memory@87f00000 { reg = <0 0x87f00000 0 0x1a00000>; no-map; };
+		memory@89900000 { reg = <0 0x89900000 0 0x2000000>; no-map; };
+		memory@8b900000 { reg = <0 0x8b900000 0 0x10000>; no-map; };
+		memory@8b910000 { reg = <0 0x8b910000 0 0xa000>; no-map; };
+		memory@8b91a000 { reg = <0 0x8b91a000 0 0x2000>; no-map; };
+		memory@8ba00000 { reg = <0 0x8ba00000 0 0x180000>; no-map; };
+		memory@8bb80000 { reg = <0 0x8bb80000 0 0x60000>; no-map; };
+		memory@8bbe0000 { reg = <0 0x8bbe0000 0 0x20000>; no-map; };
+		memory@8bc00000 { reg = <0 0x8bc00000 0 0x13200000>; no-map; };
+		memory@9ee00000 { reg = <0 0x9ee00000 0 0x700000>; no-map; };
+		memory@9f500000 { reg = <0 0x9f500000 0 0x800000>; no-map; };
+		memory@9fd00000 { reg = <0 0x9fd00000 0 0x700000>; no-map; };
+		memory@a4f00000 { reg = <0 0xa4f00000 0 0x8000>; };
+		memory@a6e00000 { reg = <0 0xa6e00000 0 0x40000>; no-map; };
+		memory@a6f00000 { reg = <0 0xa6f00000 0 0x100000>; no-map; };
+		memory@a7605000 { reg = <0 0xa7605000 0 0x8000>; };
+		/* ABL updates this region by its literal path, as it does /memory. */
+		splash_region { reg = <0 0xb8000000 0 0x2b00000>; no-map; };
+		memory@e0600000 { reg = <0 0xe0600000 0 0x400000>; no-map; };
+		memory@e0a00000 { reg = <0 0xe0a00000 0 0x100000>; no-map; };
+		memory@e55f3000 { reg = <0 0xe55f3000 0 0x9000>; no-map; };
+		memory@e55fc000 { reg = <0 0xe55fc000 0 0x4000>; no-map; };
+		memory@e5600000 { reg = <0 0xe5600000 0 0x100000>; no-map; };
+		memory@e8800000 { reg = <0 0xe8800000 0 0x100000>; no-map; };
+		memory@e8900000 { reg = <0 0xe8900000 0 0x1200000>; no-map; };
+		memory@e9b00000 { reg = <0 0xe9b00000 0 0x500000>; no-map; };
+	};
+
+	soc: soc {
+		compatible = "simple-bus";
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+
+		/* Native Cape GCC support is required for the normal UART driver. */
+		gcc: clock-controller@100000 {
+			compatible = "qcom,cape-gcc";
+			reg = <0 0x00100000 0 0x1f4200>;
+			clocks = <&rpmhcc RPMH_CXO_CLK>, <&sleep_clk>;
+			clock-names = "bi_tcxo", "sleep_clk";
+			#clock-cells = <1>;
+			#reset-cells = <1>;
+			#power-domain-cells = <1>;
+		};
+
+		qupv3_0: geniqup@9c0000 {
+			compatible = "qcom,geni-se-qup";
+			reg = <0 0x009c0000 0 0x2000>;
+			clocks = <&gcc GCC_QUPV3_WRAP_0_M_AHB_CLK>,
+				 <&gcc GCC_QUPV3_WRAP_0_S_AHB_CLK>;
+			clock-names = "m-ahb", "s-ahb";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+			status = "disabled";
+
+			uart7: serial@99c000 {
+				compatible = "qcom,geni-debug-uart";
+				reg = <0 0x0099c000 0 0x4000>;
+				interrupts = <GIC_SPI 608 IRQ_TYPE_LEVEL_HIGH>;
+				clocks = <&gcc GCC_QUPV3_WRAP0_S7_CLK>;
+				clock-names = "se";
+				status = "disabled";
+			};
+		};
+
+		tcsr_mutex: hwlock@1f40000 {
+			compatible = "qcom,tcsr-mutex";
+			reg = <0 0x01f40000 0 0x20000>;
+			#hwlock-cells = <1>;
+		};
+
+		pdc: interrupt-controller@b220000 {
+			compatible = "qcom,sm7475-pdc", "qcom,pdc";
+			reg = <0 0x0b220000 0 0x30000>,
+			      <0 0x174000f0 0 0x64>;
+			qcom,pdc-ranges = <0 480 94>, <94 609 31>,
+					  <125 63 1>, <126 716 12>;
+			#interrupt-cells = <2>;
+			interrupt-parent = <&intc>;
+			interrupt-controller;
+		};
+
+		tlmm: pinctrl@f000000 {
+			compatible = "qcom,cape-pinctrl";
+			reg = <0 0x0f000000 0 0x1000000>;
+			interrupts = <GIC_SPI 208 IRQ_TYPE_LEVEL_HIGH>;
+			gpio-controller;
+			#gpio-cells = <2>;
+			gpio-ranges = <&tlmm 0 0 211>;
+			gpio-reserved-ranges = <28 4>, <36 4>;
+			interrupt-controller;
+			#interrupt-cells = <2>;
+			wakeup-parent = <&pdc>;
+		};
+
+		intc: interrupt-controller@17100000 {
+			compatible = "arm,gic-v3";
+			reg = <0 0x17100000 0 0x10000>,
+			      <0 0x17180000 0 0x200000>;
+			interrupt-controller;
+			#interrupt-cells = <3>;
+			#redistributor-regions = <1>;
+			redistributor-stride = <0 0x40000>;
+			interrupts = <GIC_PPI 9 IRQ_TYPE_LEVEL_LOW>;
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+
+			gic_its: msi-controller@17140000 {
+				compatible = "arm,gic-v3-its";
+				reg = <0 0x17140000 0 0x20000>;
+				msi-controller;
+				#msi-cells = <1>;
+			};
+		};
+
+		apps_rsc: rsc@17a00000 {
+			compatible = "qcom,rpmh-rsc";
+			label = "apps_rsc";
+			reg = <0 0x17a00000 0 0x10000>,
+			      <0 0x17a10000 0 0x10000>,
+			      <0 0x17a20000 0 0x10000>,
+			      <0 0x17a30000 0 0x10000>;
+			reg-names = "drv-0", "drv-1", "drv-2", "drv-3";
+			interrupts = <GIC_SPI 3 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 4 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 5 IRQ_TYPE_LEVEL_HIGH>;
+			qcom,tcs-offset = <0xd00>;
+			qcom,drv-id = <2>;
+			/* Firmware also defines one type-4 TCS, unused by mainline. */
+			qcom,tcs-config = <ACTIVE_TCS 3>, <SLEEP_TCS 2>,
+					  <WAKE_TCS 2>, <CONTROL_TCS 0>;
+			power-domains = <&cluster_pd>;
+
+			rpmhcc: clock-controller {
+				/* Waipio RPMh clock resources are shared with SM8450. */
+				compatible = "qcom,sm8450-rpmh-clk";
+				#clock-cells = <1>;
+				clocks = <&xo_board>;
+				clock-names = "xo";
+			};
+		};
+	};
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <GIC_PPI 13 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_PPI 14 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_PPI 11 IRQ_TYPE_LEVEL_LOW>,
+			     <GIC_PPI 12 IRQ_TYPE_LEVEL_LOW>;
+		clock-frequency = <19200000>;
+		always-on;
+	};
+};

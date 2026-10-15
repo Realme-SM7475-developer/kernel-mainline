@@ -1257,12 +1257,12 @@ config SM_GCC_8350
 	  SPI, I2C, USB, SD/UFS, PCIe etc.
 
 config SM_GCC_8450
-	tristate "SM8450 Global Clock Controller"
+	tristate "SM8450 / SM8475 / Cape Global Clock Controller"
 	depends on ARM64 || COMPILE_TEST
 	select QCOM_GDSC
 	help
-	  Support for the global clock controller on SM8450 or SM8475
-	  devices.
+	  Support for the global clock controller on SM8450, SM8475 or
+	  Cape devices, including SM7475.
 	  Say Y if you want to use peripheral devices such as UART,
 	  SPI, I2C, USB, SD/UFS, PCIe etc.
 

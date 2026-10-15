@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: BSD-3-Clause
+
+/dts-v1/;
+
+#include "sm7475.dtsi"
+
+/ {
+	model = "realme GT Neo5 SE";
+	compatible = "realme,gt-neo5-se", "qcom,sm7475";
+	chassis-type = "handset";
+	qcom,msm-id = <0x24f 0x10000>;
+	qcom,board-id = <0x10008 0>;
+
+	/* Safe first-bank fallback from the installed device's RAM map.
+	 * The bootloader may replace this with the full installed RAM banks.
+	 */
+	memory {
+		reg = <0 0x80000000 0 0x6a000000>;
+	};
+
+	aliases {
+		serial0 = &uart7;
+	};
+
+	chosen {
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		bootargs = "earlycon=qcom_geni,0x0099c000 console=tty0 console=ttyMSM0,115200n8 loglevel=8 ignore_loglevel";
+		stdout-path = "serial0:115200n8";
+
+		/* The bootloader leaves the panel scanout running at this address. */
+		framebuffer: framebuffer@b8000000 {
+			compatible = "simple-framebuffer";
+			reg = <0x0 0xb8000000 0x0 0x2b00000>;
+			width = <1240>;
+			height = <2772>;
+			stride = <(1240 * 4)>;
+			format = "a8r8g8b8";
+		};
+	};
+};
+&qupv3_0 {
+	status = "okay";
+};
+
+&uart7 {
+	compatible = "qcom,geni-debug-uart", "qcom,msm-geni-console";
+	pinctrl-0 = <&uart7_default>;
+	pinctrl-1 = <&uart7_sleep>;
+	pinctrl-names = "default", "sleep";
+	status = "okay";
+};
+
+&tlmm {
+	uart7_default: uart7-default-state {
+		pins = "gpio26", "gpio27";
+		function = "qup7";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	uart7_sleep: uart7-sleep-state {
+		pins = "gpio26", "gpio27";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+};
