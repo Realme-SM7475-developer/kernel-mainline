@@ -131,11 +131,15 @@ make_ramdisk() {
 	[ -f "$cpio" ] || python3 - "$cpio" <<-'PY'
 	import sys, pathlib
 	out = pathlib.Path(sys.argv[1])
-	hdr = b"070701" + b"".join(b"%08X" % 0 for _ in range(13))
+	# newc (070701) 头：magic + 13 个 8 位十六进制字段
+	#   ino mode uid gid nlink mtime filesize devmajor devminor rdevmajor
+	#   rdevminor namesize check
+	# namesize 必须等于文件名字节数，否则 cpio 解析器读到空文件名直接报错。
 	name = b"TRAILER!!!\0"
-	name += b"\0" * ((4 - len(name) % 4) % 4)
-	data = hdr + name
-	out.write_bytes(data + b"\0" * ((512 - len(data) % 512) % 512))
+	fields = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, len(name), 0]
+	blob = b"070701" + b"".join(b"%08X" % f for f in fields) + name
+	blob += b"\0" * ((4 - len(blob) % 4) % 4)
+	out.write_bytes(blob + b"\0" * ((512 - len(blob) % 512) % 512))
 	PY
 	gzip -9 -c "$cpio" > "$OUT_DIR/ramdisk.cpio.gz"
 	echo "$OUT_DIR/ramdisk.cpio.gz"

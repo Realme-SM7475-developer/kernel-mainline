@@ -126,16 +126,26 @@ fdtoverlay -i out/sm7475-realme-gt-neo5-se.dtb -o /tmp/merged.dtb /tmp/noop.dtbo
 
 ## 测试与回滚
 
-手机已解锁并连接 adb 时，可将 `out/` 中的镜像刷入 A 槽：
+手机已解锁并连接 adb 时，可将 `out/` 中的镜像刷入 A 槽。**三个都要刷**：
 
 ```sh
 fastboot flash boot         out/boot.img
 fastboot flash vendor_boot  out/vendor_boot.img
 fastboot flash dtbo         out/dtbo.img
+# 关键：清掉槽位的 unbootable 标记，否则 bootloader 根本不会尝试引导，直接进 fastboot
+fastboot set_active a
 fastboot reboot
 ```
 
-出问题用原厂 dump 恢复：
+> **「秒回 fastboot」常见原因：槽位被标记为 unbootable**
+> 一次引导失败后，bootloader 会累减 `slot-retry-count`，用尽后把该槽标为
+> `slot-unbootable`。此后无论刷什么都**不再尝试引导**，`fastboot reboot` 会
+> 立刻回到 fastboot。用 `fastboot getvar slot-unbootable:a` 可确认；
+> 执行 `fastboot set_active a` 会清掉该标记（必要时两个槽都清一遍）。
+> 若 `fastboot getvar`/`oem device-info` 卡住不返回但 `fastboot devices` 仍能
+> 列出设备，说明 fastboot 控制通道坏了，**重新插拔 USB 线**即可。
+
+出问题用原厂 dump 恢复（同样要 `set_active a` 清标记）：
 
 ```sh
 fastboot flash boot         ../mainline/prebulit/boot_a.img
@@ -148,3 +158,7 @@ fastboot reboot
 
 启动后观察屏幕是否出现 `Linux version` 与 `simplefb` 相关日志；
 若仍重启，可用 `pstore`（配置中已开启）做进一步取证。
+
+> 注：`boot.img` 的 generic ramdisk 是一个**合法的空 cpio**（只有 `TRAILER!!!`），
+> 真正内容在 `vendor_boot` 里。早期版本的生成脚本漏填了 newc 头的 `namesize`
+> 字段，产出的是**非法 cpio**（`cpio -tv` 报“文件名为空”），现已修复。
