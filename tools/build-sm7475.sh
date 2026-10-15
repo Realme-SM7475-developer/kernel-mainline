@@ -60,8 +60,11 @@ DTBO_PARTITION_SIZE="${DTBO_PARTITION_SIZE:-25165824}"
 DTBO_OVERLAY="$KERNEL_ROOT/tools/boot/sm7475-dtbo-overlay.dts"
 
 # 内核命令行：v4 下写在 boot 头里，bootloader 会再追加 bootconfig / oplusboot 等。
-# console=tty0 让 simplefb 的 framebuffer console 接管屏幕输出。
-CMDLINE="${CMDLINE:-console=tty0 console=ttyMSM0,115200n8 loglevel=8 ignore_loglevel}"
+# - console=tty0：simplefb 的 framebuffer console 接管屏幕输出；
+# - clk_ignore_unused / regulator_ignore_unused：GCC 驱动接管原厂时钟控制器后，
+#   时钟框架会在 late_initcall 关掉「没人用」的时钟/电源域，其中包括 bootloader
+#   留给显示的那几路（开机 logo 会立刻黑屏）。这两个参数让它别动它们。
+CMDLINE="${CMDLINE:-console=tty0 console=ttyMSM0,115200n8 loglevel=8 ignore_loglevel clk_ignore_unused regulator_ignore_unused}"
 
 BOARD="sm7475-realme-gt-neo5-se"
 O_DIR="$BUILD_ROOT/kbuild"
