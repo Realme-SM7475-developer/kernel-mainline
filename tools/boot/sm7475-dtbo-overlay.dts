@@ -31,6 +31,11 @@
 	fragment@0 {
 		target = <&chosen>;
 		__overlay__ {
+			/* 实测：boot 头里的 cmdline 不一定进内核（Android 的 cmdline
+			 * 实际来自 DTB /chosen/bootargs，由 bootloader 写入），所以这里
+			 * 直接往 /chosen 里塞 bootargs，确保 console=tty0 生效。 */
+			bootargs = "console=tty0 console=ttyMSM0,115200n8 loglevel=8 ignore_loglevel clk_ignore_unused regulator_ignore_unused initcall_blacklist=gcc_sm8450_init,cape_pinctrl_init";
+
 			framebuffer@b8000000 {
 				compatible = "simple-framebuffer";
 				reg = <0x0 0xb8000000 0x0 0x2b00000>;

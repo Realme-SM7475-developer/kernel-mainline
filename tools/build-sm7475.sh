@@ -59,11 +59,10 @@ DTBO_PARTITION_SIZE="${DTBO_PARTITION_SIZE:-25165824}"
 
 DTBO_OVERLAY="$KERNEL_ROOT/tools/boot/sm7475-dtbo-overlay.dts"
 
-# 内核命令行：v4 下写在 boot 头里，bootloader 会再追加 bootconfig / oplusboot 等。
-# - console=tty0：simplefb 的 framebuffer console 接管屏幕输出；
-# - clk_ignore_unused / regulator_ignore_unused：GCC 驱动接管原厂时钟控制器后，
-#   时钟框架会在 late_initcall 关掉「没人用」的时钟/电源域，其中包括 bootloader
-#   留给显示的那几路（开机 logo 会立刻黑屏）。这两个参数让它别动它们。
+# 内核命令行：写进 boot 头（v4）。注意 arm64 内核实际是从 DTB /chosen/bootargs
+# 取 cmdline，而该字段会被 bootloader 用 bootconfig 覆盖，所以这里写的内容
+# 往往不生效；真正生效的是 sm7475.config 里的 CONFIG_CMDLINE(_FORCE)。
+# 这里保持一致，便于查看。
 CMDLINE="${CMDLINE:-console=tty0 console=ttyMSM0,115200n8 loglevel=8 ignore_loglevel clk_ignore_unused regulator_ignore_unused}"
 
 BOARD="sm7475-realme-gt-neo5-se"
