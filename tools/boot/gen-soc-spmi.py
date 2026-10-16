@@ -36,9 +36,9 @@ What it does:
      pointed at a label available in the mainline tree is dropped (reported
      with --verbose), because leaving a raw number behind risks colliding
      with a phandle dtc hands out to an unrelated node;
-  6. expands the direct /soc children's `reg` cells: the stock base's /soc is
-     1-cell addressed (`reg = <addr size>`) while the mainline board's /soc is
-     2-cell (`<hi addr lo size>`), so 1/1 cells become 2/2 ones;
+  6. copies every `reg` through verbatim: the board's /soc is one-cell
+     addressed, exactly like the stock base's, because the bootloader walks
+     that node before the kernel runs;
   7. labels every migrated node that something references.  When the factory
      dtbo names the node - i.e. the node's stock path is what one of the
      dtbo's `__fixups__` labels resolves to - that label is used verbatim, so
@@ -458,14 +458,8 @@ def main():
                         out.append((name, ", ".join(rewritten)))
                         continue
                 if value is not None and name == "reg" and sub.parent is soc:
-                    cells = value.strip("<> ").split()
-                    if len(cells) % 2:
+                    if len(value.strip("<> ").split()) % 2:
                         raise ValueError(f"{sub.path}: reg has odd cell count")
-                    expanded = []
-                    for k in range(0, len(cells), 2):
-                        expanded += ["0x0", cells[k], "0x0", cells[k + 1]]
-                    out.append((name, "<" + " ".join(expanded) + ">"))
-                    continue
                 out.append((name, value))
             sub.props = out
 
