@@ -3,6 +3,8 @@
 /dts-v1/;
 
 #include "sm7475.dtsi"
+/* Labels the bootloader needs to merge the factory dtbo overlays; see the file. */
+#include "sm7475-realme-gt-neo5-se-abl-labels.dtsi"
 
 / {
 	model = "realme GT Neo5 SE";

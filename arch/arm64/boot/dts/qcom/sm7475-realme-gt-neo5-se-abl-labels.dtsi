@@ -1,0 +1,146 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/*
+ * GENERATED from the stock dtbo entry for this board (msm-id 0x24f) - do not
+ * edit by hand.  Regenerate with tools/boot/gen-abl-labels.py.
+ *
+ * The bootloader merges the factory dtbo overlays onto the base DTB and
+ * resolves every fragment target by looking the label up in this DTB's
+ * /__symbols__.  The vendor tree exposes 129 such labels; a mainline
+ * tree has 3 of them.  A missing label makes the merge fail, and the
+ * phone goes back to fastboot before the kernel ever runs.
+ *
+ * Each missing label gets an empty node here, inside an isolated container:
+ * the fixup resolves, and the overlay content lands in these throwaways
+ * instead of in nodes that describe real hardware.
+ */
+
+/ {
+	abl_overlay_sink {
+		APC1_pause: abl-sym-0 { };
+		BOB: abl-sym-1 { };
+		CPU0: abl-sym-2 { };
+		CPU4: abl-sym-3 { };
+		CPU7: abl-sym-4 { };
+		L10C: abl-sym-5 { };
+		L12C: abl-sym-6 { };
+		L13C: abl-sym-7 { };
+		L1D: abl-sym-8 { };
+		L2B: abl-sym-9 { };
+		L2C: abl-sym-10 { };
+		L3C: abl-sym-11 { };
+		L4H: abl-sym-12 { };
+		L5B: abl-sym-13 { };
+		L6C: abl-sym-14 { };
+		L7B: abl-sym-15 { };
+		L9B: abl-sym-16 { };
+		L9C: abl-sym-17 { };
+		S10B: abl-sym-18 { };
+		S12B: abl-sym-19 { };
+		adsp_loader: abl-sym-20 { };
+		adsp_mem: abl-sym-21 { };
+		aliases: abl-sym-22 { };
+		apps_smmu: abl-sym-23 { };
+		audio_gpr: abl-sym-24 { };
+		battery_charger: abl-sym-25 { };
+		cam_cc_titan_top_gdsc: abl-sym-26 { };
+		cam_cci0: abl-sym-27 { };
+		cam_cci1: abl-sym-28 { };
+		cam_sensor_active_rst1: abl-sym-29 { };
+		cam_sensor_active_rst3: abl-sym-30 { };
+		cam_sensor_active_rst5: abl-sym-31 { };
+		cam_sensor_suspend_rst1: abl-sym-32 { };
+		cam_sensor_suspend_rst3: abl-sym-33 { };
+		cam_sensor_suspend_rst5: abl-sym-34 { };
+		cdsp_sw: abl-sym-35 { };
+		clock_camcc: abl-sym-36 { };
+		clock_dispcc: abl-sym-37 { };
+		cpu5_hotplug: abl-sym-38 { };
+		cpu5_pause: abl-sym-39 { };
+		cpu6_hotplug: abl-sym-40 { };
+		cpu7_hotplug: abl-sym-41 { };
+		cpu_6_7_pause: abl-sym-42 { };
+		dai_mi2s2: abl-sym-43 { };
+		display_fps: abl-sym-44 { };
+		eusb2_phy0: abl-sym-45 { };
+		firmware: abl-sym-46 { };
+		fsa4480: abl-sym-47 { };
+		gcc_ufs_phy_gdsc: abl-sym-48 { };
+		i2c_freq_100Khz_cci0: abl-sym-49 { };
+		i2c_freq_1Mhz_cci0: abl-sym-50 { };
+		i2c_freq_1Mhz_cci1: abl-sym-51 { };
+		i2c_freq_400Khz_cci0: abl-sym-52 { };
+		i2c_freq_400Khz_cci1: abl-sym-53 { };
+		lpass_audio_hw_vote: abl-sym-54 { };
+		lpass_cdc: abl-sym-55 { };
+		lpass_core_hw_vote: abl-sym-56 { };
+		lpi_tlmm: abl-sym-57 { };
+		mdss_dsi0: abl-sym-58 { };
+		mdss_dsi1: abl-sym-59 { };
+		mdss_dsi_phy0: abl-sym-60 { };
+		mdss_dsi_phy1: abl-sym-61 { };
+		mdss_mdp: abl-sym-62 { };
+		modem_lte_dsc: abl-sym-63 { };
+		modem_nr_dsc: abl-sym-64 { };
+		modem_nr_scg_dsc: abl-sym-65 { };
+		msm_gpu: abl-sym-66 { };
+		nfc_enable_active: abl-sym-67 { };
+		nfc_enable_suspend: abl-sym-68 { };
+		nfc_int_active: abl-sym-69 { };
+		nfc_int_suspend: abl-sym-70 { };
+		qupv3_se0_i2c: abl-sym-71 { };
+		qupv3_se0_i2c_active: abl-sym-72 { };
+		qupv3_se0_i2c_pins: abl-sym-73 { };
+		qupv3_se0_i2c_sleep: abl-sym-74 { };
+		qupv3_se13_i2c: abl-sym-75 { };
+		qupv3_se14_i2c: abl-sym-76 { };
+		qupv3_se18_spi: abl-sym-77 { };
+		qupv3_se19_spi: abl-sym-78 { };
+		qupv3_se1_i2c: abl-sym-79 { };
+		qupv3_se4_i2c: abl-sym-80 { };
+		qupv3_se4_spi: abl-sym-81 { };
+		qupv3_se5_i2c: abl-sym-82 { };
+		qupv3_se9_i2c: abl-sym-83 { };
+		ramoops_mem: abl-sym-84 { };
+		reserved_memory: abl-sym-85 { };
+		sdc2_off: abl-sym-86 { };
+		sdc2_on: abl-sym-87 { };
+		sde_dp: abl-sym-88 { };
+		sde_rscc: abl-sym-89 { };
+		sdhc_2: abl-sym-90 { };
+		smmu_sde_sec: abl-sym-91 { };
+		smmu_sde_unsec: abl-sym-92 { };
+		spf_core_platform: abl-sym-93 { };
+		spkr2_1_sd_n_active: abl-sym-94 { };
+		spkr2_1_sd_n_sleep: abl-sym-95 { };
+		spkr2_2_sd_n_active: abl-sym-96 { };
+		spkr2_2_sd_n_sleep: abl-sym-97 { };
+		spkr_1_sd_n_active: abl-sym-98 { };
+		spkr_1_sd_n_sleep: abl-sym-99 { };
+		spkr_2_sd_n_active: abl-sym-100 { };
+		spkr_2_sd_n_sleep: abl-sym-101 { };
+		spmi_bus: abl-sym-102 { };
+		stub_codec: abl-sym-103 { };
+		tert_mi2s_sck_active: abl-sym-104 { };
+		tert_mi2s_sck_sleep: abl-sym-105 { };
+		tert_mi2s_sd0_active: abl-sym-106 { };
+		tert_mi2s_sd0_sleep: abl-sym-107 { };
+		tert_mi2s_sd1_active: abl-sym-108 { };
+		tert_mi2s_sd1_sleep: abl-sym-109 { };
+		tert_mi2s_ws_active: abl-sym-110 { };
+		tert_mi2s_ws_sleep: abl-sym-111 { };
+		thermal_zones: abl-sym-112 { };
+		ts_active: abl-sym-113 { };
+		ts_int_suspend: abl-sym-114 { };
+		ts_release: abl-sym-115 { };
+		ts_reset_suspend: abl-sym-116 { };
+		ucsi: abl-sym-117 { };
+		ufshc_mem: abl-sym-118 { };
+		ufsphy_mem: abl-sym-119 { };
+		usb0: abl-sym-120 { };
+		usb3phy_portselect_default: abl-sym-121 { };
+		va_cdc_dma_0_tx: abl-sym-122 { };
+		video_mem: abl-sym-123 { };
+		wcd938x_reset_active: abl-sym-124 { };
+		wcd938x_reset_sleep: abl-sym-125 { };
+	};
+};
