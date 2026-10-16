@@ -112,13 +112,20 @@ def split_dtbs(region):
 def replace_matching_dtb(region, dtb):
     """Swap only the DTB slot whose qcom,msm-id matches ours.
 
-    The stock vendor_boot DTB area is not one blob: it starts with a small
-    opaque prefix (7752 bytes here, holding a vendor ELF) followed by several
-    concatenated DTBs - slot0 msm-id 0x21c, slot2 msm-id 0x24f - and the
+    The stock vendor_boot DTB area is not one blob: it is several concatenated
+    DTBs - slot0 msm-id 0x21c, slot1 msm-id 0x212, slot2 msm-id 0x24f - and the
     bootloader picks a slot by msm-id.  Overwriting the whole area with a
-    single FDT, which is what this tool used to do, discards the prefix and
-    every slot the board might have needed.  Keep all of that byte-for-byte
-    and rewrite only our own slot.
+    single FDT, which is what this tool used to do, discards every slot the
+    board might have needed.
+
+    The replacement keeps the slot's *extent*, not just its start: the stock
+    region is 3 DTBs whose sizes add up to exactly dtb_size, so writing a
+    shorter FDT would shorten the region, change the header's dtb_size, and
+    shift the vendor ramdisk table and bootconfig that follow it.  The
+    bootloader is known to reject a vendor_boot whose DTB area was replaced,
+    even with a structurally valid, same-msm-id DTB, so keep the region
+    byte-for-byte the same length and zero-fill the tail of the slot instead.
+    That leaves the DTB content as the only difference from the stock image.
     """
     mine = fdt_root_u32(dtb, b"qcom,msm-id")
     if not mine:
@@ -127,7 +134,14 @@ def replace_matching_dtb(region, dtb):
     for index, (offset, size) in enumerate(slots):
         if fdt_root_u32(region[offset:offset + size], b"qcom,msm-id") == mine:
             end = slots[index + 1][0] if index + 1 < len(slots) else len(region)
-            return bytes(region[:offset]) + dtb + bytes(region[end:])
+            extent = end - offset
+            if len(dtb) > extent:
+                raise ValueError(
+                    f"replacement DTB is {len(dtb)} bytes, larger than the "
+                    f"{extent}-byte stock slot; the region extent cannot be kept"
+                )
+            return bytes(region[:offset]) + dtb + bytes(extent - len(dtb)) \
+                + bytes(region[end:])
     raise ValueError(f"no stock DTB slot matches msm-id {mine}")
 
 
