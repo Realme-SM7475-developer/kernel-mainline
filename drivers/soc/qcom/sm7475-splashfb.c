@@ -23,6 +23,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/io.h>
 #include <linux/ioport.h>
 #include <linux/module.h>
 #include <linux/platform_data/simplefb.h>
@@ -34,6 +35,41 @@
 #define SM7475_SPLASHFB_HEIGHT	2772
 #define SM7475_SPLASHFB_STRIDE	(SM7475_SPLASHFB_WIDTH * 4)
 #define SM7475_SPLASHFB_FORMAT	"a8r8g8b8"
+
+/*
+ * Poor man's console for bring-up: since no kernel log ever reaches the panel
+ * on this device, the kernel reports its own progress by painting the splash
+ * buffer.  The colour the panel ends up showing therefore tells us how far the
+ * kernel got:
+ *	blue	- reached early_initcall (ioremap works, address is scanned)
+ *	green	- reached arch_initcall (past all the low-level SoC setup)
+ *	nothing	- never got there, or 0xb8000000 is not what the panel scans
+ * (pixel encoding follows the a8r8g8b8 format: AARRGGBB)
+ */
+#define SM7475_FB_BLUE	0xff0000ff
+#define SM7475_FB_GREEN	0xff00ff00
+
+static void __init sm7475_splashfb_paint(u32 px)
+{
+	void __iomem *fb;
+	u32 i, n = SM7475_SPLASHFB_WIDTH * SM7475_SPLASHFB_HEIGHT;
+
+	fb = ioremap(SM7475_SPLASHFB_BASE, SM7475_SPLASHFB_SIZE);
+	if (!fb)
+		return;
+
+	for (i = 0; i < n; i++)
+		writel(px, fb + i * 4);
+
+	iounmap(fb);
+}
+
+static int __init sm7475_splashfb_early(void)
+{
+	sm7475_splashfb_paint(SM7475_FB_BLUE);
+	return 0;
+}
+early_initcall(sm7475_splashfb_early);
 
 static struct simplefb_platform_data sm7475_splashfb_pdata = {
 	.width	= SM7475_SPLASHFB_WIDTH,
@@ -57,6 +93,7 @@ static struct platform_device sm7475_splashfb_dev = {
 
 static int __init sm7475_splashfb_init(void)
 {
+	sm7475_splashfb_paint(SM7475_FB_GREEN);
 	return platform_device_register(&sm7475_splashfb_dev);
 }
 arch_initcall(sm7475_splashfb_init);
