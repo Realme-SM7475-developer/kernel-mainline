@@ -16,6 +16,7 @@
  *   ramoops_mem, video_mem, adsp_mem       sm7475.dtsi (/reserved-memory regions)
  *   aliases                                sm7475-realme-gt-neo5-se.dts
  *   spmi_bus, battery_charger, ucsi        sm7475-realme-gt-neo5-se-soc-spmi.dtsi
+ *   ufshc_mem, ufsphy_mem                  sm7475-realme-gt-neo5-se-soc-spmi.dtsi
  *   firmware, CPU0, CPU4, CPU7             re-declared below
  *
  * Only the labels with no real node left get an empty node inside the isolated
@@ -133,8 +134,6 @@
 		ts_int_suspend: abl-sym-117 { };
 		ts_release: abl-sym-118 { };
 		ts_reset_suspend: abl-sym-119 { };
-		ufshc_mem: abl-sym-121 { };
-		ufsphy_mem: abl-sym-122 { };
 		usb0: abl-sym-123 { };
 		usb3phy_portselect_default: abl-sym-124 { };
 		va_cdc_dma_0_tx: abl-sym-125 { };

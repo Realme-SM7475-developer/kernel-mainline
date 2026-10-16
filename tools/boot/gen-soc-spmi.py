@@ -94,6 +94,18 @@ KNOWN_TARGET_LABELS = {
 SUBSYSTEM_RE = re.compile(r"spmi|pmic", re.IGNORECASE)
 ARB_COMPATIBLE = "qcom,spmi-pmic-arb"
 
+# /soc children the bootloader is expected to walk by path while it updates the
+# tree it hands the kernel, even though the factory dtbo does not merge into
+# them: the UFS host is the boot device the bootloader names in
+# androidboot.bootdevice/boot_devices, its PHY is the sibling it pairs with it,
+# and msm-imem is the region the bootloader/QSEE write.  Migrating them keeps
+# those paths present in our tree the way the stock base has them.
+EXTRA_PATHS = {
+    "/soc/ufshc@1d84000",
+    "/soc/ufsphy_mem@1d80000",
+    "/soc/qcom,msm-imem@146aa000",
+}
+
 
 def fdt_root_props(blob):
     """Collect a raw FDT blob's root node properties."""
@@ -376,6 +388,9 @@ def main():
         raise ValueError("stock base has no /soc")
     selected = []
     for child in soc.children:
+        if child.path in EXTRA_PATHS:
+            selected.append(child)
+            continue
         compat = (child.prop("compatible") or "").lower()
         if SUBSYSTEM_RE.search(child.name) or SUBSYSTEM_RE.search(compat):
             selected.append(child)

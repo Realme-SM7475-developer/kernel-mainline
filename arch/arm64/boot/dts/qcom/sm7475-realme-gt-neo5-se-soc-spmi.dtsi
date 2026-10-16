@@ -170,4 +170,98 @@
 			};
 		};
 	};
+	ufsphy_mem: ufsphy_mem@1d80000 {
+		reg = <0x1d80000 0x2000>;
+		reg-names = "phy_mem";
+		#phy-cells = <0x00>;
+		lanes-per-direction = <0x02>;
+		clock-names = "ref_clk_src\0ref_aux_clk\0qref_clk\0rx_sym0_mux_clk\0rx_sym1_mux_clk\0tx_sym0_mux_clk\0rx_sym0_phy_clk\0rx_sym1_phy_clk\0tx_sym0_phy_clk";
+		resets = <&ufshc_mem 0x00>;
+		status = "disabled";
+	};
+	ufshc_mem: ufshc@1d84000 {
+		compatible = "qcom,ufshc";
+		reg = <0x1d84000 0x3000 0x1d88000 0x8000 0x1d90000 0x9000>;
+		reg-names = "ufs_mem\0ufs_ice\0ufs_ice_hwkm";
+		interrupts = <0x00 0x109 0x04>;
+		phys = <&ufsphy_mem>;
+		phy-names = "ufsphy";
+		#reset-cells = <0x01>;
+		qcom,prime-mask = <0x70>;
+		qcom,silver-mask = <0x0f>;
+		lanes-per-direction = <0x02>;
+		dev-ref-clk-freq = <0x00>;
+		clock-names = "core_clk\0bus_aggr_clk\0iface_clk\0core_clk_unipro\0core_clk_ice\0ref_clk\0tx_lane0_sync_clk\0rx_lane0_sync_clk\0rx_lane1_sync_clk";
+		clocks = <&gcc 0x97 0x24 0x0a 0x24 0x96 0x24 0xa6 0x24 0x9a 0x20 0x00 0x24 0xa4 0x24 0xa0 0x24 0xa2>;
+		freq-table-hz = <0x47868c0 0x32a9f880 0x00 0x00 0x00 0x00 0x47868c0 0x32a9f880 0x47868c0 0x32a9f880 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00>;
+		interconnect-names = "ufs-ddr\0cpu-ufs";
+		qcom,ufs-bus-bw,name = "ufshc_mem";
+		qcom,ufs-bus-bw,num-cases = <0x1a>;
+		qcom,ufs-bus-bw,num-paths = <0x02>;
+		qcom,ufs-bus-bw,vectors-KBps = <0x00 0x00 0x00 0x00 0x39a 0x00 0x3e8 0x00 0x734 0x00 0x3e8 0x00 0xe68 0x00 0x3e8 0x00 0x1cd0 0x00 0x3e8 0x00 0x734 0x00 0x3e8 0x00 0xe68 0x00 0x3e8 0x00 0x1cd0 0x00 0x3e8 0x00 0x39a0 0x00 0x3e8 0x00 0x1f334 0x00 0x3e8 0x00 0x3e667 0x00 0x3e8 0x00 0x16c666 0x00 0x19000 0x00 0x2c7b80 0x00 0x32000 0x00 0x3e667 0x00 0x3e8 0x00 0x7cccd 0x00 0x3e8 0x00 0x16c666 0x00 0x32000 0x00 0x2c7b80 0x00 0x64000 0x00 0x247ae 0x00 0x3e8 0x00 0x48ccd 0x00 0x3e8 0x00 0x16c666 0x00 0x19000 0x00 0x2c7b80 0x00 0x32000 0x00 0x48ccd 0x00 0x3e8 0x00 0x9199a 0x00 0x3e8 0x00 0x16c666 0x00 0x32000 0x64000 0x2c7b80 0x00 0x64000 0x64000 0x74a000 0xb71b00 0x64000 0x64000>;
+		qcom,bus-vector-names = "MIN\0PWM_G1_L1\0PWM_G2_L1\0PWM_G3_L1\0PWM_G4_L1\0PWM_G1_L2\0PWM_G2_L2\0PWM_G3_L2\0PWM_G4_L2\0HS_RA_G1_L1\0HS_RA_G2_L1\0HS_RA_G3_L1\0HS_RA_G4_L1\0HS_RA_G1_L2\0HS_RA_G2_L2\0HS_RA_G3_L2\0HS_RA_G4_L2\0HS_RB_G1_L1\0HS_RB_G2_L1\0HS_RB_G3_L1\0HS_RB_G4_L1\0HS_RB_G1_L2\0HS_RB_G2_L2\0HS_RB_G3_L2\0HS_RB_G4_L2\0MAX";
+		reset-gpios = <&tlmm 0xd2 0x01>;
+		resets = <&gcc 0x19>;
+		reset-names = "rst";
+		qcom,iommu-dma = "fastmap";
+		dma-coherent;
+		qcom,iommu-faults = "non-fatal";
+		multi-level-clk-scaling-support;
+		axi-turbo-clk-freq = <0x32a9f880>;
+		axi-turbo-l1-clk-freq = <0x32a9f880>;
+		ice-turbo-clk-freq = <0x32a9f880>;
+		ice-turbo-l1-clk-freq = <0x32a9f880>;
+		unipro-turbo-clk-freq = <0x32a9f880>;
+		unipro-turbo-l1-clk-freq = <0x32a9f880>;
+		disable-cgc;
+		status = "disabled";
+		qos0 {
+			mask = <0xf0>;
+			vote = <0x2c>;
+			perf;
+		};
+		qos1 {
+			mask = <0x0f>;
+			vote = <0x2c>;
+		};
+	};
+	m_qcom_msm_imem_146aa000: qcom,msm-imem@146aa000 {
+		compatible = "qcom,msm-imem";
+		reg = <0x146aa000 0x1000>;
+		ranges = <0x00 0x146aa000 0x1000>;
+		#address-cells = <0x01>;
+		#size-cells = <0x01>;
+		mem_dump_table@10 {
+			compatible = "qcom,msm-imem-mem_dump_table";
+			reg = <0x10 0x08>;
+		};
+		restart_reason@65c {
+			compatible = "qcom,msm-imem-restart_reason";
+			reg = <0x65c 0x04>;
+		};
+		dload_type@1c {
+			compatible = "qcom,msm-imem-dload-type";
+			reg = <0x1c 0x04>;
+		};
+		boot_stats@6b0 {
+			compatible = "qcom,msm-imem-boot_stats";
+			reg = <0x6b0 0x20>;
+		};
+		kaslr_offset@6d0 {
+			compatible = "qcom,msm-imem-kaslr_offset";
+			reg = <0x6d0 0x0c>;
+		};
+		pil@94c {
+			compatible = "qcom,pil-reloc-info";
+			reg = <0x94c 0xc8>;
+		};
+		pil@6dc {
+			compatible = "qcom,msm-imem-pil-disable-timeout";
+			reg = <0x6dc 0x04>;
+		};
+		diag_dload@c8 {
+			compatible = "qcom,msm-imem-diag-dload";
+			reg = <0xc8 0xc8>;
+		};
+	};
 };
