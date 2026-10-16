@@ -73,7 +73,7 @@
 	status = "okay";
 };
 
-&tlmm {
+&msm_tlmm {
 	uart7_default: uart7-default-state {
 		pins = "gpio26", "gpio27";
 		function = "qup7";

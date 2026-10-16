@@ -222,7 +222,7 @@
 		memory@e9b00000 { reg = <0 0xe9b00000 0 0x500000>; no-map; };
 	};
 
-	soc: soc {
+	msm_soc: soc {
 		compatible = "simple-bus";
 		#address-cells = <2>;
 		#size-cells = <2>;
@@ -277,13 +277,13 @@
 			interrupt-controller;
 		};
 
-		tlmm: pinctrl@f000000 {
+		msm_tlmm: pinctrl@f000000 {
 			compatible = "qcom,cape-pinctrl";
 			reg = <0 0x0f000000 0 0x1000000>;
 			interrupts = <GIC_SPI 208 IRQ_TYPE_LEVEL_HIGH>;
 			gpio-controller;
 			#gpio-cells = <2>;
-			gpio-ranges = <&tlmm 0 0 211>;
+			gpio-ranges = <&msm_tlmm 0 0 211>;
 			gpio-reserved-ranges = <28 4>, <36 4>;
 			interrupt-controller;
 			#interrupt-cells = <2>;
@@ -311,7 +311,7 @@
 			};
 		};
 
-		apps_rsc: rsc@17a00000 {
+		msm_rsc: rsc@17a00000 {
 			compatible = "qcom,rpmh-rsc";
 			label = "apps_rsc";
 			reg = <0 0x17a00000 0 0x10000>,
