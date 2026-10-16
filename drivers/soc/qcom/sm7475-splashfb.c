@@ -9,9 +9,7 @@
  * makes the bootloader drop straight back to fastboot), and an extra dtbo
  * entry we add is not applied either - so a DT framebuffer node can never be
  * injected and no fbdev is ever created, leaving the panel frozen on the
- * bootloader logo with no kernel log at all.  simplefb's platform-device path
- * is registered below as well, but the probe evidently does not produce a
- * usable fbdev here, so the console below does not depend on it.
+ * bootloader logo with no kernel log at all.
  *
  * What does work - and is proven on hardware - is writing straight into the
  * linear mapping of the buffer the panel is still scanning (the bootloader's
@@ -21,6 +19,14 @@
  * font.  printk then feeds it like any other console, and CON_PRINTBUFFER
  * replays the whole backlog at registration, which is what finally makes
  * dmesg visible on screen.
+ *
+ * This console must be the *only* writer of that buffer.  An earlier revision
+ * also registered a "simple-framebuffer" platform device, which made simplefb
+ * probe and fbcon bind fb0 to the very same physical pixels; two consoles
+ * interleaving writes into one buffer the panel is already scanning is exactly
+ * what produced the snowflake tearing, and fbcon's own redraws kept scrolling
+ * our text away.  FB_SIMPLE and FRAMEBUFFER_CONSOLE are therefore off and no
+ * platform device is created - nothing else may touch these pixels.
  *
  * Rendering model - why a shadow buffer:
  * the panel keeps scanning this buffer while we draw into it.  Two things
@@ -44,20 +50,16 @@
 #include <linux/font.h>
 #include <linux/init.h>
 #include <linux/io.h>
-#include <linux/ioport.h>
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/string.h>
 #include <linux/vmalloc.h>
-#include <linux/platform_data/simplefb.h>
-#include <linux/platform_device.h>
 
 #define SM7475_SPLASHFB_BASE	0xb8000000
 #define SM7475_SPLASHFB_SIZE	0x02b00000
 #define SM7475_SPLASHFB_WIDTH	1240
 #define SM7475_SPLASHFB_HEIGHT	2772
 #define SM7475_SPLASHFB_STRIDE	(SM7475_SPLASHFB_WIDTH * 4)
-#define SM7475_SPLASHFB_FORMAT	"a8r8g8b8"
 
 /* visible framebuffer size: the reserved region is larger, we only touch this */
 #define SM7475_SPLASHFB_FBSIZE	(SM7475_SPLASHFB_STRIDE * SM7475_SPLASHFB_HEIGHT)
@@ -226,17 +228,16 @@ static struct console sm7475_console = {
 static void __iomem *sm7475_map(void)
 {
 	/*
-	 * The region is plain reserved RAM, not an MMIO aperture, so memremap()
-	 * with MEMREMAP_WC is the right way to get an uncached write-combining
-	 * mapping onto the actual DRAM the display controller reads.  Fall back
-	 * to ioremap_wc(), then to phys_to_virt(), so a mapping failure cannot
-	 * silently blank the screen again.
+	 * Only ioremap_wc() can produce a mapping here.  memremap() refuses
+	 * outright: the region is reported as IORESOURCE_SYSTEM_RAM, and
+	 * memremap() WARN_ONCE()s and returns -ENXIO for any RAM region, so it
+	 * would only ever add a spurious warning to the log.  A write-combining
+	 * mapping is what we want anyway - it is uncached, so nothing we draw
+	 * lingers in the CPU cache waiting for an eviction the display
+	 * controller never waits for.  Fall back to phys_to_virt() so a mapping
+	 * failure cannot silently blank the screen again.
 	 */
-	void __iomem *p = memremap(SM7475_SPLASHFB_BASE, SM7475_SPLASHFB_SIZE,
-				   MEMREMAP_WC);
-
-	if (!p)
-		p = ioremap_wc(SM7475_SPLASHFB_BASE, SM7475_SPLASHFB_SIZE);
+	void __iomem *p = ioremap_wc(SM7475_SPLASHFB_BASE, SM7475_SPLASHFB_SIZE);
 
 	return p ? p : (void __iomem *)phys_to_virt(SM7475_SPLASHFB_BASE);
 }
@@ -257,36 +258,6 @@ static int __init sm7475_splashfb_init(void)
 	return 0;
 }
 early_initcall(sm7475_splashfb_init);
-
-/*
- * Also try the regular path, in case simplefb eventually probes: harmless if
- * it does not, and if it does, fbcon takes over the same buffer.
- */
-static struct simplefb_platform_data sm7475_splashfb_pdata = {
-	.width	= SM7475_SPLASHFB_WIDTH,
-	.height	= SM7475_SPLASHFB_HEIGHT,
-	.stride	= SM7475_SPLASHFB_STRIDE,
-	.format	= SM7475_SPLASHFB_FORMAT,
-};
-
-static struct resource sm7475_splashfb_res =
-	DEFINE_RES_MEM(SM7475_SPLASHFB_BASE, SM7475_SPLASHFB_SIZE);
-
-static struct platform_device sm7475_splashfb_dev = {
-	.name		= "simple-framebuffer",
-	.id		= 0,
-	.num_resources	= 1,
-	.resource	= &sm7475_splashfb_res,
-	.dev		= {
-		.platform_data = &sm7475_splashfb_pdata,
-	},
-};
-
-static int __init sm7475_simplefb_register(void)
-{
-	return platform_device_register(&sm7475_splashfb_dev);
-}
-arch_initcall(sm7475_simplefb_register);
 
 MODULE_DESCRIPTION("Realme GT Neo5 SE (SM7475) bootloader splash framebuffer console");
 MODULE_LICENSE("GPL");

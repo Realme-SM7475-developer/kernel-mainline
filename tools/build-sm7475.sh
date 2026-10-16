@@ -65,7 +65,7 @@ DTBO_OVERLAY="$KERNEL_ROOT/tools/boot/sm7475-dtbo-overlay.dts"
 # 取 cmdline，而该字段会被 bootloader 用 bootconfig 覆盖，所以这里写的内容
 # 往往不生效；真正生效的是 sm7475.config 里的 CONFIG_CMDLINE(_FORCE)。
 # 这里保持一致，便于查看。
-CMDLINE="${CMDLINE:-console=tty0 console=ttyMSM0,115200n8 loglevel=8 ignore_loglevel clk_ignore_unused regulator_ignore_unused}"
+CMDLINE="${CMDLINE:-console=ttyMSM0,115200n8 loglevel=7 clk_ignore_unused regulator_ignore_unused}"
 
 BOARD="sm7475-realme-gt-neo5-se"
 O_DIR="$BUILD_ROOT/kbuild"

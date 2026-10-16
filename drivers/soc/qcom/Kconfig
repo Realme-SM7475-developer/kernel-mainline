@@ -296,20 +296,20 @@ config QCOM_PBS
 	  PBS trigger event to the PBS RAM.
 
 config SM7475_SPLASHFB
-	bool "Realme GT Neo5 SE (SM7475) bootloader splash framebuffer"
+	bool "Realme GT Neo5 SE (SM7475) bootloader splash framebuffer console"
 	depends on ARCH_QCOM || COMPILE_TEST
-	depends on FB_SIMPLE
 	help
-	  Register a "simple-framebuffer" platform device for the linear
-	  framebuffer the bootloader already set up (its reserved-memory
-	  "splash_region"), so that fbdev/fbcon can print the kernel log on the
-	  panel from early boot.
+	  Register a "struct console" that renders printk straight into the
+	  linear buffer the bootloader already set up (its reserved-memory
+	  "splash_region") and the panel is still scanning, so the kernel log
+	  is readable on the phone screen from early boot.
 
 	  Needed on this device because its bootloader refuses any modification
 	  of the DTBs handed to the kernel, so a /chosen/simple-framebuffer node
-	  cannot be injected and no framebuffer device would otherwise exist.
-	  The panel keeps scanning the bootloader splash buffer, so pointing the
-	  kernel at it is enough.  If unsure, say N.
+	  cannot be injected and no fbdev is ever created.  This console does
+	  not use fbdev at all and deliberately does not create one - it must be
+	  the only writer of those pixels, so keep FB_SIMPLE and
+	  FRAMEBUFFER_CONSOLE off.  If unsure, say N.
 
 endmenu
 
