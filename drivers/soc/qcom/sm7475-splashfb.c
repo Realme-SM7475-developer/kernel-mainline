@@ -154,9 +154,24 @@ static struct console sm7475_console = {
 	.index	= -1,
 };
 
+static void __iomem *sm7475_map(void)
+{
+	/*
+	 * The buffer is plain reserved RAM, so phys_to_virt() gives a *cacheable*
+	 * mapping: pixel writes then linger in the CPU cache and the display
+	 * controller, which reads DRAM, only sees them late and partially - which
+	 * shows up as ghosting/after-images.  An uncached write-combining mapping
+	 * (what fbdev uses for framebuffers) is what we actually want.  Fall back
+	 * to phys_to_virt() so a mapping failure cannot silently blank us again.
+	 */
+	void __iomem *p = ioremap_wc(SM7475_SPLASHFB_BASE, SM7475_SPLASHFB_SIZE);
+
+	return p ? p : (void __iomem *)phys_to_virt(SM7475_SPLASHFB_BASE);
+}
+
 static int __init sm7475_splashfb_init(void)
 {
-	sm7475_fb = (void __iomem *)phys_to_virt(SM7475_SPLASHFB_BASE);
+	sm7475_fb = sm7475_map();
 	sm7475_font = font_vga_8x16.data;
 	if (!sm7475_fb || !sm7475_font)
 		return 0;
