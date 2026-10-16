@@ -1,0 +1,171 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/*
+ * GENERATED - do not edit by hand.
+ *
+ * Batch 1 of the /soc migration: the SPMI/PMIC subsystem copied out of
+ * the stock base DTB (vendor_boot slot msm-id 0x24f).  Regenerate with
+ * tools/boot/gen-soc-spmi.py.
+ *
+ * The stock base carries two qcom,spmi-pmic-arb nodes (0xc42d000 bus-id 0
+ * and 0xc432000 bus-id 1) that both register the same bus and map the same
+ * 0xc400000 "core" window; that produced -EEXIST for 0-0 and -EBUSY on
+ * 0xc400000.  Only the bus the stock /__symbols__ calls `spmi_bus` and the
+ * factory dtbo overlays extend survives.  Raw phandle numbers were
+ * rewritten into label references; reg cells were expanded from the stock
+ * tree's 1/1 addressing to this tree's 2/2 /soc addressing.  Labels are
+ * m_-prefixed because the 129 factory-dtbo sink labels own the stock ones.
+ */
+
+&msm_soc {
+	m_qcom_spmi_c42d000: qcom,spmi@c42d000 {
+		compatible = "qcom,spmi-pmic-arb";
+		reg = <0x0 0xc42d000 0x0 0x4000 0x0 0xc400000 0x0 0x3000 0x0 0xc500000 0x0 0x400000 0x0 0xc440000 0x0 0x80000 0x0 0xc4c0000 0x0 0x10000>;
+		reg-names = "cnfg\0core\0chnls\0obsrvr\0intr";
+		interrupts-extended = <&pdc 0x01 0x04>;
+		interrupt-names = "periph_irq";
+		interrupt-controller;
+		#interrupt-cells = <0x04>;
+		#address-cells = <0x02>;
+		#size-cells = <0x00>;
+		cell-index = <0x00>;
+		qcom,channel = <0x00>;
+		qcom,ee = <0x00>;
+		qcom,bus-id = <0x00>;
+	};
+	m_qcom_spmi_debug_10b14000: qcom,spmi-debug@10b14000 {
+		compatible = "qcom,spmi-pmic-arb-debug";
+		reg = <0x0 0x10b14000 0x0 0x60 0x0 0x221c8784 0x0 0x04>;
+		reg-names = "core\0fuse";
+		clock-names = "core_clk";
+		qcom,fuse-enable-bit = <0x12>;
+		#address-cells = <0x02>;
+		#size-cells = <0x00>;
+		depends-on-supply = <&m_qcom_spmi_c42d000>;
+		depends-on2-supply = <&m_qcom_smb1394_debug_9>;
+		qcom,pmk8350-debug@0 {
+			compatible = "qcom,spmi-pmic";
+			reg = <0x00 0x00>;
+			#address-cells = <0x02>;
+			#size-cells = <0x00>;
+			qcom,can-sleep;
+		};
+		qcom,pm8350-debug@1 {
+			compatible = "qcom,spmi-pmic";
+			reg = <0x01 0x00>;
+			#address-cells = <0x02>;
+			#size-cells = <0x00>;
+			qcom,can-sleep;
+		};
+		qcom,pm8350c-debug@2 {
+			compatible = "qcom,spmi-pmic";
+			reg = <0x02 0x00>;
+			#address-cells = <0x02>;
+			#size-cells = <0x00>;
+			qcom,can-sleep;
+		};
+		qcom,pm8350b-debug@3 {
+			compatible = "qcom,spmi-pmic";
+			reg = <0x03 0x00>;
+			#address-cells = <0x02>;
+			#size-cells = <0x00>;
+			qcom,can-sleep;
+		};
+		qcom,pmr735a-debug@4 {
+			compatible = "qcom,spmi-pmic";
+			reg = <0x04 0x00>;
+			#address-cells = <0x02>;
+			#size-cells = <0x00>;
+			qcom,can-sleep;
+		};
+		qcom,pmr735b-debug@5 {
+			compatible = "qcom,spmi-pmic";
+			reg = <0x05 0x00>;
+			#address-cells = <0x02>;
+			#size-cells = <0x00>;
+			qcom,can-sleep;
+		};
+		qcom,pm8450-debug@7 {
+			compatible = "qcom,spmi-pmic";
+			reg = <0x07 0x00>;
+			#address-cells = <0x02>;
+			#size-cells = <0x00>;
+			qcom,can-sleep;
+		};
+		qcom,pm8010-debug@8 {
+			compatible = "qcom,spmi-pmic";
+			reg = <0x08 0x00>;
+			#address-cells = <0x02>;
+			#size-cells = <0x00>;
+			qcom,can-sleep;
+		};
+		qcom,pm8010-debug@9 {
+			compatible = "qcom,spmi-pmic";
+			reg = <0x09 0x00>;
+			#address-cells = <0x02>;
+			#size-cells = <0x00>;
+			qcom,can-sleep;
+		};
+	};
+	m_qcom_pmic_glink: qcom,pmic_glink {
+		compatible = "qcom,pmic-glink";
+		qcom,pmic-glink-channel = "PMIC_RTR_ADSP_APPS";
+		qcom,subsys-name = "lpass";
+		qcom,protection-domain = "tms/servreg\0msm/adsp/charger_pd";
+		m_qcom_battery_charger: qcom,battery_charger {
+			compatible = "qcom,battery-charger";
+		};
+		m_qcom_ucsi: qcom,ucsi {
+			compatible = "qcom,ucsi-glink";
+		};
+		m_qcom_altmode: qcom,altmode {
+			compatible = "qcom,altmode-glink";
+			#altmode-cells = <0x01>;
+		};
+	};
+	m_qcom_pmic_glink_log: qcom,pmic_glink_log {
+		compatible = "qcom,pmic-glink";
+		qcom,pmic-glink-channel = "PMIC_LOGS_ADSP_APPS";
+		qcom,battery_debug {
+			compatible = "qcom,battery-debug";
+		};
+		qcom,charger_ulog_glink {
+			compatible = "qcom,charger-ulog-glink";
+		};
+		qcom,spmi_glink_debug {
+			compatible = "qcom,spmi-glink-debug";
+			#address-cells = <0x01>;
+			#size-cells = <0x00>;
+			depends-on-supply = <&m_qcom_spmi_c42d000>;
+			spmi@0 {
+				reg = <0x00>;
+				#address-cells = <0x02>;
+				#size-cells = <0x00>;
+				qcom,pm8350b-debug@3 {
+					compatible = "qcom,spmi-pmic";
+					reg = <0x03 0x00>;
+					qcom,can-sleep;
+				};
+			};
+			spmi@1 {
+				reg = <0x01>;
+				#address-cells = <0x02>;
+				#size-cells = <0x00>;
+				m_qcom_smb1394_debug_9: qcom,smb1394-debug@9 {
+					compatible = "qcom,spmi-pmic";
+					reg = <0x09 0x00>;
+					qcom,can-sleep;
+				};
+				qcom,smb1394-debug@b {
+					compatible = "qcom,spmi-pmic";
+					reg = <0x0b 0x00>;
+					qcom,can-sleep;
+				};
+				qcom,smb1396-debug@d {
+					compatible = "qcom,spmi-pmic";
+					reg = <0x0d 0x00>;
+					qcom,can-sleep;
+				};
+			};
+		};
+	};
+};
