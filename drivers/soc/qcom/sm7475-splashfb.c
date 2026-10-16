@@ -25,6 +25,7 @@
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/ioport.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/platform_data/simplefb.h>
 #include <linux/platform_device.h>
@@ -51,17 +52,17 @@
 
 static void __init sm7475_splashfb_paint(u32 px)
 {
-	void __iomem *fb;
+	/*
+	 * 0xb8000000 is part of the kernel linear map (splash_region is reserved
+	 * but not "no-map"), so use phys_to_virt - ioremap() could return NULL
+	 * and fail silently, which is exactly the kind of thing we must not have
+	 * in a self-reporting bring-up aid.
+	 */
+	void __iomem *fb = (void __iomem *)phys_to_virt(SM7475_SPLASHFB_BASE);
 	u32 i, n = SM7475_SPLASHFB_WIDTH * SM7475_SPLASHFB_HEIGHT;
-
-	fb = ioremap(SM7475_SPLASHFB_BASE, SM7475_SPLASHFB_SIZE);
-	if (!fb)
-		return;
 
 	for (i = 0; i < n; i++)
 		writel(px, fb + i * 4);
-
-	iounmap(fb);
 }
 
 static int __init sm7475_splashfb_early(void)
