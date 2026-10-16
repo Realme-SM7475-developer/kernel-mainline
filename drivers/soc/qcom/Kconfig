@@ -295,6 +295,22 @@ config QCOM_PBS
 	  This module provides the APIs to the client drivers that wants to send the
 	  PBS trigger event to the PBS RAM.
 
+config SM7475_SPLASHFB
+	bool "Realme GT Neo5 SE (SM7475) bootloader splash framebuffer"
+	depends on ARCH_QCOM || COMPILE_TEST
+	depends on FB_SIMPLE
+	help
+	  Register a "simple-framebuffer" platform device for the linear
+	  framebuffer the bootloader already set up (its reserved-memory
+	  "splash_region"), so that fbdev/fbcon can print the kernel log on the
+	  panel from early boot.
+
+	  Needed on this device because its bootloader refuses any modification
+	  of the DTBs handed to the kernel, so a /chosen/simple-framebuffer node
+	  cannot be injected and no framebuffer device would otherwise exist.
+	  The panel keeps scanning the bootloader splash buffer, so pointing the
+	  kernel at it is enough.  If unsure, say N.
+
 endmenu
 
 config QCOM_UBWC_CONFIG
