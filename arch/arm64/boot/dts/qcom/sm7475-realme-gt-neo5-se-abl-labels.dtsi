@@ -13,6 +13,7 @@
  * values it carries point at the node the stock tree points them at:
  *
  *   soc, tlmm, apps_rsc, reserved_memory   sm7475.dtsi
+ *   ramoops_mem, video_mem, adsp_mem       sm7475.dtsi (/reserved-memory regions)
  *   aliases                                sm7475-realme-gt-neo5-se.dts
  *   spmi_bus, battery_charger, ucsi        sm7475-realme-gt-neo5-se-soc-spmi.dtsi
  *   firmware, CPU0, CPU4, CPU7             re-declared below
@@ -43,7 +44,6 @@
 		S10B: abl-sym-18 { };
 		S12B: abl-sym-19 { };
 		adsp_loader: abl-sym-20 { };
-		adsp_mem: abl-sym-21 { };
 		apps_smmu: abl-sym-24 { };
 		audio_gpr: abl-sym-25 { };
 		cam_cc_titan_top_gdsc: abl-sym-27 { };
@@ -103,7 +103,6 @@
 		qupv3_se4_spi: abl-sym-82 { };
 		qupv3_se5_i2c: abl-sym-83 { };
 		qupv3_se9_i2c: abl-sym-84 { };
-		ramoops_mem: abl-sym-85 { };
 		sdc2_off: abl-sym-87 { };
 		sdc2_on: abl-sym-88 { };
 		sde_dp: abl-sym-89 { };
@@ -139,7 +138,6 @@
 		usb0: abl-sym-123 { };
 		usb3phy_portselect_default: abl-sym-124 { };
 		va_cdc_dma_0_tx: abl-sym-125 { };
-		video_mem: abl-sym-126 { };
 		wcd938x_reset_active: abl-sym-127 { };
 		wcd938x_reset_sleep: abl-sym-128 { };
 	};
