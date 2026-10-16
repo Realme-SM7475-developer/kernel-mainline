@@ -140,8 +140,14 @@ def replace_matching_dtb(region, dtb):
                     f"replacement DTB is {len(dtb)} bytes, larger than the "
                     f"{extent}-byte stock slot; the region extent cannot be kept"
                 )
-            return bytes(region[:offset]) + dtb + bytes(extent - len(dtb)) \
-                + bytes(region[end:])
+            # Grow the blob to the slot's extent and advertise that extent as
+            # its totalsize, so the three DTBs still tile the region exactly
+            # (sum of sizes == dtb_size) while dtb_size itself is untouched.
+            # libfdt treats the tail as free space inside the blob, which is
+            # what any dtc-generated blob carries when it is not packed.
+            blob = bytearray(dtb + bytes(extent - len(dtb)))
+            struct.pack_into(">I", blob, 4, extent)
+            return bytes(region[:offset]) + bytes(blob) + bytes(region[end:])
     raise ValueError(f"no stock DTB slot matches msm-id {mine}")
 
 
