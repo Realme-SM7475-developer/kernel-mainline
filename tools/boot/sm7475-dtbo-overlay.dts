@@ -29,8 +29,15 @@
 	/* 往原厂 /chosen 里塞入 simple-framebuffer，让 simplefb 接管开机 logo
 	 * 所在的扫描缓冲，从而在内核启动早期就能在屏幕上看到 dmesg。 */
 	fragment@0 {
-		target = <&chosen>;
+		target-path = "/chosen";
 		__overlay__ {
+			/* 显式声明 cell 数：原厂 base DTB 的 /chosen 本身没有
+			 * #address-cells/#size-cells，靠继承 root 的 2/2。overlay 里
+			 * 不写清，dtc 会按默认的 2/1 解析下面的 reg（之前报 reg_format
+			 * warning 就是这个），framebuffer 的地址/长度就取错了。 */
+			#address-cells = <2>;
+			#size-cells = <2>;
+
 			/* 实测：boot 头里的 cmdline 不一定进内核（Android 的 cmdline
 			 * 实际来自 DTB /chosen/bootargs，由 bootloader 写入），所以这里
 			 * 直接往 /chosen 里塞 bootargs，确保 console=tty0 生效。 */

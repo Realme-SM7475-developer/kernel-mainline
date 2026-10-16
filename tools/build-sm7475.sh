@@ -53,6 +53,8 @@ MKDTBOIMG="${MKDTBOIMG:-/home/yukino/project/android/los23.2/system/libufdt/util
 # 原厂 dump：作为 boot/vendor_boot 的封装母本，沿用其 vendor ramdisk/table/bootconfig
 BASE_BOOT="${BASE_BOOT:-$PROJECT_ROOT/mainline/prebulit/boot_a.img}"
 BASE_VENDOR_BOOT="${BASE_VENDOR_BOOT:-$PROJECT_ROOT/mainline/prebulit/vendor_boot_a.img}"
+# 原厂 dtbo：其 3 条 dt_table_entry 会被逐字节保留，显示管线才不会被 bootloader 关掉
+BASE_DTBO="${BASE_DTBO:-$PROJECT_ROOT/mainline/prebulit/dtbo_a.img}"
 
 # dtbo 分区实际大小（0x1800000 = 24 MiB），打包时补齐，避免只覆盖分区开头
 DTBO_PARTITION_SIZE="${DTBO_PARTITION_SIZE:-25165824}"
@@ -152,29 +154,25 @@ make_ramdisk() {
 }
 
 make_dtbo() {
-	# 编译与本机匹配的空 overlay，打成 Android dtbo 分区镜像。
-	# 原厂 overlay 依赖原厂 base DTB 的 /__symbols__，mainline DTB 没有这些
-	# 符号，bootloader apply 时会 FDT_ERR_NOTFOUND 失败并直接回落 fastboot；
-	# 换成不依赖符号（target-path）的空 overlay，启动链即可走通。
-	local dtc="$O_DIR/scripts/dtc/dtc"
-	if [ ! -x "$dtc" ]; then dtc="$(command -v dtc || true)"; fi
-	[ -n "$dtc" ] && [ -x "$dtc" ] || die "找不到 dtc（请先编译内核）"
-	need "$DTBO_OVERLAY"
-	# dtbo 分区同样要有 AVB footer：实测缺 footer 时 bootloader 直接拒绝引导
-	# （表现就是「秒回 fastboot」），而带 footer 即使非原厂密钥也能通过。
+	# 实测两条硬性要求：
+	#  1) dtbo 分区必须带 AVB footer，否则 bootloader 直接拒绝引导（秒回 fastboot）；
+	#  2) 往原厂 entry 里追加 fragment 不会被应用，所以这里把 3 条原厂
+	#     dt_table_entry **逐字节保留**，再把我们自己的 overlay 作为**额外第 4 条
+	#     entry** 追加进去（往 /chosen 注入 simple-framebuffer）。
+	#     保留原厂 entry 是为了让显示管线不被 bootloader 关掉（否则变黑屏）。
 	local key="$KEY_DIR/boot.key"
 	need "$key"
-	# 先写到 BUILD_ROOT：打包脚本会清空 OUT_DIR 下的 *.img 再重新落盘，
-	# 若直接生成在 OUT_DIR 会被它自己删掉。
+	need "$BASE_DTBO"
 	local out="$BUILD_ROOT/dtbo.img"
-	log "生成 dtbo overlay -> $out"
-	"$dtc" -I dts -O dtb -o "$BUILD_ROOT/dtbo-noop.dtbo" "$DTBO_OVERLAY"
-	python3 "$MKDTBOIMG" create "$out" \
-		--page_size=4096 "$BUILD_ROOT/dtbo-noop.dtbo"
-	# add_hash_footer 会顺带把镜像补齐到分区大小并写入 AVBf/AVB0，勿再 truncate
-	"$AVBTOOL" add_hash_footer --image "$out" \
-		--partition_name dtbo --partition_size "$DTBO_PARTITION_SIZE" \
-		--algorithm SHA256_RSA4096 --key "$key" >/dev/null
+	log "生成 dtbo（3 条原厂 entry + 我们的 overlay entry）-> $out"
+	python3 "$BUILD_SRC/tools/boot/dtbo_add_framebuffer.py" \
+		--stock-dtbo "$BASE_DTBO" \
+		--mkdtboimg "$MKDTBOIMG" \
+		--avbtool "$AVBTOOL" \
+		--key "$key" \
+		--partition-size "$DTBO_PARTITION_SIZE" \
+		--append-entry-dts "$DTBO_OVERLAY" \
+		--output "$out" >/dev/null
 	echo "$out"
 }
 

@@ -62,9 +62,11 @@ tools/build-sm7475.sh menuconfig
   本机 cmdline（`console=tty0 ...`，见 `CMDLINE` 环境变量）
 - `vendor_boot.img`：**与原厂逐字节一致**（`--preserve-vendor-boot`）。该机
   bootloader 拒绝任何 vendor_boot DTB 替换，详见下文
-- `dtbo.img`：由 `tools/boot/sm7475-dtbo-overlay.dts` 现场编译、并加 AVB
-  footer 封装（24 MiB）。它把 `simple-framebuffer` 注入原厂 base DTB 的
-  `/chosen`，是屏幕上能看到日志的关键
+- `dtbo.img`：**3 条原厂 dt_table_entry 逐字节保留**（显示管线才不会被
+  bootloader 关掉），再追加**第 4 条 entry**——即
+  `tools/boot/sm7475-dtbo-overlay.dts` 编译出的 overlay（`target-path =
+  "/chosen"`，往 `/chosen` 注入 `simple-framebuffer`）。生成逻辑在
+  `tools/boot/dtbo_add_framebuffer.py`，并统一加 AVB footer
 - `Image` / `config` / `sm7475-realme-gt-neo5-se.dtb` / `ramdisk.cpio.gz` /
   `manifest.json` / `payloads.sha256`
 
