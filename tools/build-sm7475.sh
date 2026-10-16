@@ -194,20 +194,12 @@ package() {
 	# 逐字节保留。换了 DTB 会让原厂 AVB 签名失效，因此用本机自签测试密钥
 	# 重新生成 footer（bootloader 接受结构合法的 footer，见 README 第 1 条）。
 	#
-	# 另外 bootloader 每开机都要往 /chosen 里就地改写 bootargs / kaslr-seed /
-	# linux,initrd-start / linux,initrd-end，而 blob 没有余量去新增属性，
-	# 所以这些属性必须预先存在：后三个已在板级 dts 里声明，bootargs 在这里
-	# 先垫成 2 KB 空白，好让 bootloader 那串约 1.6 KB 的参数写得进去。
-	local dtb_prepared="$BUILD_ROOT/dtb-prepared.dtb"
-	cp "$dtb" "$dtb_prepared"
-	fdtput -t s "$dtb_prepared" /chosen bootargs "$(printf '%*s' 2048 '')" \
-		|| die "fdtput: 无法预置 /chosen/bootargs"
-	for p in bootargs kaslr-seed linux,initrd-start linux,initrd-end; do
-		fdtget "$dtb_prepared" /chosen "$p" >/dev/null 2>&1 \
-			|| die "预置后的 DTB 缺少 /chosen/$p"
-	done
-	log "已预置 /chosen 属性 -> $dtb_prepared"
-	dtb="$dtb_prepared"
+	# /chosen is deliberately left stock-shaped (bootargs + stdout-path only).
+	# The earlier 2 KB bootargs placeholder and the kaslr-seed / initrd
+	# pre-declarations were added on the theory that the bootloader writes
+	# those in place and needs the properties to pre-exist; flashing the stock
+	# DTB proved it adds them by itself, so they are gone.  The effective
+	# kernel command line comes from CONFIG_CMDLINE_FORCE anyway.
 	python3 "$BUILD_SRC/tools/boot/build_mainline_images.py" \
 		--mkbootimg "$MKBOOTIMG" \
 		--base-boot "$BASE_BOOT" \

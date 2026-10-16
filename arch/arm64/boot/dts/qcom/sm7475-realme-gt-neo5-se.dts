@@ -38,33 +38,16 @@
 		serial0 = &uart7;
 	};
 
+	/* The stock base's /chosen carries only a bootargs string and
+	 * stdout-path; the bootloader adds kaslr-seed / linux,initrd-start /
+	 * linux,initrd-end itself on every boot even though the stock blob has no
+	 * spare room for them, so pre-creating them here is not needed.  The
+	 * splash console driver registers the panel scanout buffer directly
+	 * (see drivers/soc/qcom/sm7475-splashfb.c) and needs no framebuffer node.
+	 */
 	chosen: chosen {
-		#address-cells = <2>;
-		#size-cells = <2>;
-		ranges;
-		bootargs = "earlycon=qcom_geni,0x0099c000 console=tty0 console=ttyMSM0,115200n8 loglevel=8 ignore_loglevel";
-
-		/*
-		 * The bootloader overwrites these three in place on every boot and
-		 * the blob has no spare room to add them (the stock base DTB has
-		 * zero slack either), so they have to pre-exist here or the write
-		 * fails and the bootloader drops straight back to fastboot.  The
-		 * stock /chosen carries exactly this set - see README.
-		 */
-		kaslr-seed = <0 0>;
-		linux,initrd-start = <0 0>;
-		linux,initrd-end = <0 0>;
+		bootargs = "console=ttyMSM0,115200n8 console=tty0 quiet oops=panic clk_ignore_unused regulator_ignore_unused";
 		stdout-path = "serial0:115200n8";
-
-		/* The bootloader leaves the panel scanout running at this address. */
-		framebuffer: framebuffer@b8000000 {
-			compatible = "simple-framebuffer";
-			reg = <0x0 0xb8000000 0x0 0x2b00000>;
-			width = <1240>;
-			height = <2772>;
-			stride = <(1240 * 4)>;
-			format = "a8r8g8b8";
-		};
 	};
 };
 &qupv3_0 {
