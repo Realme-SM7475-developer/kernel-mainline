@@ -11,6 +11,14 @@
 	qcom,msm-id = <0x24f 0x10000>;
 	qcom,board-id = <0x10008 0>;
 
+	/*
+	 * The factory dtbo entry for this board (msm-id 0x24f) is picked by the
+	 * bootloader on msm-id + board-id + pmic-id, and it declares pmic-id.
+	 * Carrying the same values keeps this DTB selectable instead of skipped.
+	 */
+	qcom,pmic-id = <0x2f 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x41 0x41>;
+	qcom,pmic-id-size = <0x0a>;
+
 	/* Safe first-bank fallback from the installed device's RAM map.
 	 * The bootloader may replace this with the full installed RAM banks.
 	 */
@@ -22,11 +30,22 @@
 		serial0 = &uart7;
 	};
 
-	chosen {
+	chosen: chosen {
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
 		bootargs = "earlycon=qcom_geni,0x0099c000 console=tty0 console=ttyMSM0,115200n8 loglevel=8 ignore_loglevel";
+
+		/*
+		 * The bootloader overwrites these three in place on every boot and
+		 * the blob has no spare room to add them (the stock base DTB has
+		 * zero slack either), so they have to pre-exist here or the write
+		 * fails and the bootloader drops straight back to fastboot.  The
+		 * stock /chosen carries exactly this set - see README.
+		 */
+		kaslr-seed = <0 0>;
+		linux,initrd-start = <0 0>;
+		linux,initrd-end = <0 0>;
 		stdout-path = "serial0:115200n8";
 
 		/* The bootloader leaves the panel scanout running at this address. */

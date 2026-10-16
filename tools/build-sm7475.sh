@@ -188,9 +188,26 @@ package() {
 	krel="$(cat "$O_DIR/include/config/kernel.release" 2>/dev/null || echo unknown)"
 
 	log "打包 Android v4 镜像 -> $OUT_DIR（母本: 原厂 dump）"
-	# vendor_boot 保持原厂逐字节一致：该机 bootloader 拒绝任何 vendor_boot
-	# DTB 替换（哪怕只换其中一份 DTB 也会秒回 fastboot），所以用
-	# --preserve-vendor-boot，并且不能再给它加自签 footer。
+	# vendor_boot 的 DTB 区域不再整段替换：它其实是「7752 字节前缀 + 3 份
+	# 首尾相接的 DTB」，bootloader 按 qcom,msm-id 从中选一份（0x21c / 0x24f）。
+	# 所以打包工具只把 msm-id 匹配的那一份换成我们的 DTB，前缀和另外两份
+	# 逐字节保留。换了 DTB 会让原厂 AVB 签名失效，因此用本机自签测试密钥
+	# 重新生成 footer（bootloader 接受结构合法的 footer，见 README 第 1 条）。
+	#
+	# 另外 bootloader 每开机都要往 /chosen 里就地改写 bootargs / kaslr-seed /
+	# linux,initrd-start / linux,initrd-end，而 blob 没有余量去新增属性，
+	# 所以这些属性必须预先存在：后三个已在板级 dts 里声明，bootargs 在这里
+	# 先垫成 2 KB 空白，好让 bootloader 那串约 1.6 KB 的参数写得进去。
+	local dtb_prepared="$BUILD_ROOT/dtb-prepared.dtb"
+	cp "$dtb" "$dtb_prepared"
+	fdtput -t s "$dtb_prepared" /chosen bootargs "$(printf '%*s' 2048 '')" \
+		|| die "fdtput: 无法预置 /chosen/bootargs"
+	for p in bootargs kaslr-seed linux,initrd-start linux,initrd-end; do
+		fdtget "$dtb_prepared" /chosen "$p" >/dev/null 2>&1 \
+			|| die "预置后的 DTB 缺少 /chosen/$p"
+	done
+	log "已预置 /chosen 属性 -> $dtb_prepared"
+	dtb="$dtb_prepared"
 	python3 "$BUILD_SRC/tools/boot/build_mainline_images.py" \
 		--mkbootimg "$MKBOOTIMG" \
 		--base-boot "$BASE_BOOT" \
@@ -202,7 +219,7 @@ package() {
 		--dtb "$dtb" \
 		--dtbo "$dtbo" \
 		--cmdline "$CMDLINE" \
-		--preserve-vendor-boot \
+		--vendor-avb-key "$KEY_DIR/vendor.key" \
 		--avbtool "$AVBTOOL" \
 		--boot-avb-key "$KEY_DIR/boot.key" \
 		--output-dir "$OUT_DIR" >/dev/null

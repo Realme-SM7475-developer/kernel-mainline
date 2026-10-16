@@ -5,9 +5,11 @@ The phone uses the standard Android v4 split layout: boot.img contains the
 kernel and generic ramdisk, while vendor_boot.img contains the vendor ramdisk,
 ramdisk table, bootconfig, and DTB. This tool keeps those sections from the
 stock images and replaces only the requested kernel, generic ramdisk, and DTB.
-It can also preserve the stock signed vendor_boot byte-for-byte; changing its
-DTB invalidates the OEM AVB signature and cannot be repaired without the OEM
-private key.
+It can also preserve the stock signed vendor_boot byte-for-byte.
+
+Replacing the vendor_boot DTB area invalidates the OEM AVB signature, so a
+replacement is stamped with a self-signed test footer instead (the bootloader
+accepts a structurally valid footer; see README, "秒回 fastboot" section).
 """
 
 import argparse
@@ -49,6 +51,84 @@ def section(data, offset, size):
 
 def valid_dtb(data):
     return len(data) >= 40 and struct.unpack_from(">II", data) == (0xD00DFEED, len(data))
+
+
+FDT_MAGIC = b"\xd0\x0d\xfe\xed"
+
+
+def fdt_root_props(blob):
+    """Collect the root node's properties from a raw FDT blob."""
+    off_struct = struct.unpack_from(">I", blob, 8)[0]
+    off_strings = struct.unpack_from(">I", blob, 12)[0]
+    size_struct = struct.unpack_from(">I", blob, 36)[0]
+    props = {}
+    i, depth = off_struct, 0
+    end = off_struct + size_struct
+    while i < end:
+        token = struct.unpack_from(">I", blob, i)[0]
+        i += 4
+        if token == 1:                          # FDT_BEGIN_NODE
+            i = blob.index(b"\0", i) + 1
+            if depth == 0:                      # root name is empty + padding
+                i = (i + 3) & ~3
+            depth += 1
+        elif token == 2:                        # FDT_END_NODE
+            depth -= 1
+            if depth == 0:
+                break
+        elif token == 3:                        # FDT_PROP
+            length, nameoff = struct.unpack_from(">II", blob, i)
+            i += 8
+            stop = off_strings + nameoff
+            props[blob[stop:blob.index(b"\0", stop)]] = blob[i:i + length]
+            i = (i + length + 3) & ~3
+        elif token == 4:                        # FDT_NOP
+            pass
+        else:                                   # FDT_END, or garbage
+            break
+    return props
+
+
+def fdt_root_u32(blob, name):
+    value = fdt_root_props(blob).get(name)
+    if not value:
+        return None
+    return [struct.unpack_from(">I", value, k)[0]
+            for k in range(0, len(value), 4)]
+
+
+def split_dtbs(region):
+    """Locate each FDT in a concatenated blob as (offset, totalsize)."""
+    found = []
+    start = 0
+    while True:
+        offset = region.find(FDT_MAGIC, start)
+        if offset < 0 or offset + 40 > len(region):
+            return found
+        found.append((offset, struct.unpack_from(">I", region, offset + 4)[0]))
+        start = offset + 4
+
+
+def replace_matching_dtb(region, dtb):
+    """Swap only the DTB slot whose qcom,msm-id matches ours.
+
+    The stock vendor_boot DTB area is not one blob: it starts with a small
+    opaque prefix (7752 bytes here, holding a vendor ELF) followed by several
+    concatenated DTBs - slot0 msm-id 0x21c, slot2 msm-id 0x24f - and the
+    bootloader picks a slot by msm-id.  Overwriting the whole area with a
+    single FDT, which is what this tool used to do, discards the prefix and
+    every slot the board might have needed.  Keep all of that byte-for-byte
+    and rewrite only our own slot.
+    """
+    mine = fdt_root_u32(dtb, b"qcom,msm-id")
+    if not mine:
+        raise ValueError("replacement DTB has no qcom,msm-id")
+    slots = split_dtbs(region)
+    for index, (offset, size) in enumerate(slots):
+        if fdt_root_u32(region[offset:offset + size], b"qcom,msm-id") == mine:
+            end = slots[index + 1][0] if index + 1 < len(slots) else len(region)
+            return bytes(region[:offset]) + dtb + bytes(region[end:])
+    raise ValueError(f"no stock DTB slot matches msm-id {mine}")
 
 
 def stock_boot_layout(data):
@@ -125,8 +205,9 @@ def build_vendor(base_vendor, dtb):
     header, ramdisk, old_dtb, table, bootconfig = stock_vendor_layout(base_vendor)
     if not valid_dtb(dtb):
         raise ValueError("DTB must contain exactly one complete FDT")
-    struct.pack_into("<I", header, 2100, len(dtb))
-    result = bytes(header) + padded(ramdisk) + padded(dtb) + padded(table) + padded(bootconfig)
+    region = replace_matching_dtb(old_dtb, dtb)
+    struct.pack_into("<I", header, 2100, len(region))
+    result = bytes(header) + padded(ramdisk) + padded(region) + padded(table) + padded(bootconfig)
     if len(result) > len(base_vendor):
         raise ValueError("replacement vendor_boot exceeds the input partition")
     return result
