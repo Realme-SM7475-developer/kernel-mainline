@@ -157,7 +157,7 @@ static void sm7475_flush(void)
 {
 	size_t off, len;
 
-	if (!sm7475_dirty_first || !sm7475_fb)
+	if (!sm7475_fb)
 		return;
 	if (sm7475_dirty_first >= sm7475_dirty_last) {
 		sm7475_dirty_first = SM7475_SPLASHFB_HEIGHT;
