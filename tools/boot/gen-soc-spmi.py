@@ -106,6 +106,34 @@ EXTRA_PATHS = {
     "/soc/qcom,msm-imem@146aa000",
 }
 
+# The /soc children this board tree already defines for itself (mainline
+# sm7475.dtsi plus the migrated batches).  --all-soc must not emit them again:
+# the fragment would collide on the same path, and dtc rejects duplicate nodes.
+OUR_SOC_PATHS = {
+    "/soc/clock-controller@100000",
+    "/soc/geniqup@9c0000",
+    "/soc/hwlock@1f40000",
+    "/soc/interrupt-controller@b220000",
+    "/soc/pinctrl@f000000",
+    "/soc/interrupt-controller@17100000",
+    "/soc/rsc@17a00000",
+    "/soc/qcom,spmi@c42d000",
+    "/soc/qcom,spmi-debug@10b14000",
+    "/soc/qcom,pmic_glink",
+    "/soc/qcom,pmic_glink_log",
+    "/soc/ufsphy_mem@1d80000",
+    "/soc/ufshc@1d84000",
+    "/soc/qcom,msm-imem@146aa000",
+}
+
+# The same nodes under the names the stock base gives them, so a stock child
+# that describes the same register block is recognised as already present.
+OUR_SOC_ADDRS = {
+    0x100000, 0x9C0000, 0x1F40000, 0xB220000, 0xF000000,
+    0x17100000, 0x17A00000, 0xC42D000, 0x10B14000, 0x1D80000,
+    0x1D84000, 0x146AA000,
+}
+
 
 def fdt_root_props(blob):
     """Collect a raw FDT blob's root node properties."""
@@ -312,6 +340,18 @@ def find(root, path):
     return node
 
 
+def node_addr(node):
+    """First cell of `reg`, for a node its parent addresses with one cell."""
+    value = node.prop("reg")
+    if not value:
+        return None
+    cells = value.strip("<> ").split()
+    try:
+        return int(cells[0], 0)
+    except (IndexError, ValueError):
+        return None
+
+
 def is_phandle_prop(name):
     if name in PHANDLE_PROPS:
         return True
@@ -345,6 +385,12 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dtc", default="/usr/bin/dtc")
     parser.add_argument("--msm-id", default="0x24f")
+    parser.add_argument("--all-soc", action="store_true",
+                        help="migrate every stock /soc child this tree does not "
+                             "already define, instead of the SPMI/PMIC batch")
+    parser.add_argument("--covered-labels-output", type=Path,
+                        help="write the factory-dtbo labels this run puts on real "
+                             "nodes, so they can be removed from the abl sink")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
     msm_id = int(args.msm_id, 16)
@@ -387,13 +433,29 @@ def main():
     if soc is None:
         raise ValueError("stock base has no /soc")
     selected = []
-    for child in soc.children:
-        if child.path in EXTRA_PATHS:
+    if args.all_soc:
+        # The stock base carries two qcom,spmi-pmic-arb nodes that register the
+        # same bus; only the one /__symbols__ calls `spmi_bus` may exist, and the
+        # board tree already has that one.  Never bring the twin back.
+        survivor = symbols.get("spmi_bus")
+        for child in soc.children:
+            if child.path in OUR_SOC_PATHS:
+                continue
+            if node_addr(child) in OUR_SOC_ADDRS:
+                continue
+            if ARB_COMPATIBLE in re.findall(r'"([^"]*)"',
+                                            child.prop("compatible") or "") \
+                    and child.path != survivor:
+                continue
             selected.append(child)
-            continue
-        compat = (child.prop("compatible") or "").lower()
-        if SUBSYSTEM_RE.search(child.name) or SUBSYSTEM_RE.search(compat):
-            selected.append(child)
+    else:
+        for child in soc.children:
+            if child.path in EXTRA_PATHS:
+                selected.append(child)
+                continue
+            compat = (child.prop("compatible") or "").lower()
+            if SUBSYSTEM_RE.search(child.name) or SUBSYSTEM_RE.search(compat):
+                selected.append(child)
     if not selected:
         raise ValueError("no SPMI/PMIC /soc children found")
 
@@ -423,6 +485,17 @@ def main():
                     label += "_"
                 assigned[label] = sub
                 sub.label = label
+
+    # Labels this fragment now carries on real nodes.  Whatever the abl-labels
+    # sink still owns for those names has to go, or dtc reports a duplicate
+    # label and the base fails to build.
+    covered = sorted({label for label, sub in assigned.items()
+                      if dtbo_label.get(sub.path) == label})
+    if args.covered_labels_output:
+        args.covered_labels_output.write_text("\n".join(covered) + "\n")
+    if covered:
+        print(f"{len(covered)} factory-dtbo labels now sit on real nodes: "
+              f"{covered}", file=sys.stderr)
 
     def resolve(cell):
         """Label a cell must become a reference to, or None.
