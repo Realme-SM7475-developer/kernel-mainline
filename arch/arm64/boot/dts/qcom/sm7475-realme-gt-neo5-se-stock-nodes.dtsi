@@ -1,0 +1,110 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/*
+ * GENERATED - do not edit by hand.
+ *
+ * The stock base DTB (vendor_boot slot2, msm-id 0x24f) carries five top-level
+ * nodes this mainline tree does not: ddr-regions, sram@17D09400, firmware,
+ * idle-states and cluster-device.  The bootloader may fix those up itself
+ * before it hands the tree over, so they are copied here verbatim (with the
+ * explicit phandle properties dropped so dtc can assign its own).  They are
+ * inert for the kernel; the point is that the base DTB is not missing pieces
+ * the bootloader expects to find.
+ */
+
+/ {
+	ddr-regions {
+	};
+	sram@17D09400 {
+		#address-cells = <0x02>;
+		#size-cells = <0x02>;
+		compatible = "mmio-sram";
+		reg = <0x00 0x17d09400 0x00 0x400>;
+		ranges = <0x00 0x00 0x00 0x17d09400 0x00 0x400>;
+
+		scp-shmem@0 {
+			compatible = "arm,scp-shmem";
+			reg = <0x00 0x00 0x00 0x400>;
+		};
+	};
+	firmware {
+
+		qcom_scm {
+			compatible = "qcom,scm";
+			qcom,dload-mode = <0x02 0x13000>;
+		};
+
+		qtee_shmbridge {
+			compatible = "qcom,tee-shared-memory-bridge";
+		};
+
+		qcom_smcinvoke {
+			compatible = "qcom,smcinvoke";
+		};
+
+		android {
+			compatible = "android,firmware";
+
+			vbmeta {
+				compatible = "android,vbmeta";
+				parts = "vbmeta,boot,system,vendor,dtbo,recovery";
+			};
+
+			fstab {
+				compatible = "android,fstab";
+
+				vendor {
+					compatible = "android,vendor";
+					dev = "/dev/block/platform/soc/1d84000.ufshc/by-name/vendor";
+					type = "ext4";
+					mnt_flags = "ro,barrier=1,discard";
+					fsmgr_flags = "wait,slotselect,avb";
+					status = "ok";
+				};
+			};
+		};
+	};
+	idle-states {
+
+		silver-c4 {
+			compatible = "arm,idle-state";
+			idle-state-name = "rail-pc";
+			entry-latency-us = <0x320>;
+			exit-latency-us = <0x2ee>;
+			min-residency-us = <0xffa>;
+			arm,psci-suspend-param = <0x40000004>;
+			local-timer-stop;
+		};
+
+		gold-c4 {
+			compatible = "arm,idle-state";
+			idle-state-name = "rail-pc";
+			entry-latency-us = <0x258>;
+			exit-latency-us = <0x60e>;
+			min-residency-us = <0x12b7>;
+			arm,psci-suspend-param = <0x40000004>;
+			local-timer-stop;
+		};
+
+		cluster-d4 {
+			compatible = "domain-idle-state";
+			idle-state-name = "l3-off";
+			entry-latency-us = <0x41a>;
+			exit-latency-us = <0x9c4>;
+			min-residency-us = <0x14bd>;
+			arm,psci-suspend-param = <0x41000044>;
+		};
+
+		cluster-e3 {
+			compatible = "domain-idle-state";
+			idle-state-name = "llcc-off";
+			entry-latency-us = <0xa8c>;
+			exit-latency-us = <0xdac>;
+			min-residency-us = <0x3687>;
+			arm,psci-suspend-param = <0x4100c344>;
+		};
+	};
+	cluster-device {
+		compatible = "qcom,lpm-cluster-dev";
+		power-domains = <0x1d>;
+	};
+};

@@ -5,21 +5,24 @@
 #include "sm7475.dtsi"
 /* Labels the bootloader needs to merge the factory dtbo overlays; see the file. */
 #include "sm7475-realme-gt-neo5-se-abl-labels.dtsi"
+/* Top-level nodes the stock base has and the bootloader may fix up; see the file. */
+#include "sm7475-realme-gt-neo5-se-stock-nodes.dtsi"
 
 / {
 	model = "realme GT Neo5 SE";
-	compatible = "realme,gt-neo5-se", "qcom,sm7475";
+	/* "qcom,ukee" is what the stock base declares, and what the bootloader
+	 * itself writes into the tree it hands the kernel.  Keep our own strings
+	 * first, then add the platform ones, so base selection cannot skip us for
+	 * carrying only an unknown board string. */
+	compatible = "realme,gt-neo5-se", "qcom,sm7475",
+		     "qcom,ukee-mtp", "qcom,ukee", "qcom,mtp";
 	chassis-type = "handset";
 	qcom,msm-id = <0x24f 0x10000>;
-	qcom,board-id = <0x10008 0>;
-
-	/*
-	 * The factory dtbo entry for this board (msm-id 0x24f) is picked by the
-	 * bootloader on msm-id + board-id + pmic-id, and it declares pmic-id.
-	 * Carrying the same values keeps this DTB selectable instead of skipped.
-	 */
-	qcom,pmic-id = <0x2f 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x41 0x41>;
-	qcom,pmic-id-size = <0x0a>;
+	/* The stock base declares <0 0> - an "any board" wildcard - and carries no
+	 * pmic-id at all; pmic-id belongs on the dtbo entry, not on the base.
+	 * Writing a specific board-id / pmic-id here makes base selection stricter
+	 * than the stock image and can get our slot skipped. */
+	qcom,board-id = <0 0>;
 
 	/* Safe first-bank fallback from the installed device's RAM map.
 	 * The bootloader may replace this with the full installed RAM banks.
