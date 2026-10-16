@@ -105,6 +105,9 @@
 	};
 	cluster-device {
 		compatible = "qcom,lpm-cluster-dev";
-		power-domains = <0x1d>;
+		/* The stock blob stores the cluster power domain as the bare phandle
+		 * 0x1d; copied verbatim that number lands on whatever node dtc handed
+		 * the value to in this tree.  Point it at the board's own node. */
+		power-domains = <&cluster_pd>;
 	};
 };

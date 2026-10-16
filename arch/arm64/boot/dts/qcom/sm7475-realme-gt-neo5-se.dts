@@ -33,7 +33,8 @@
 		reg = <0 0x80000000 0 0x6a000000>;
 	};
 
-	aliases {
+	/* The factory dtbo extends /aliases, so it needs the stock label. */
+	aliases: aliases {
 		serial0 = &uart7;
 	};
 
@@ -78,7 +79,7 @@
 	status = "okay";
 };
 
-&msm_tlmm {
+&tlmm {
 	uart7_default: uart7-default-state {
 		pins = "gpio26", "gpio27";
 		function = "qup7";

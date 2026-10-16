@@ -12,12 +12,14 @@
  * 0xc400000.  Only the bus the stock /__symbols__ calls `spmi_bus` and the
  * factory dtbo overlays extend survives.  Raw phandle numbers were
  * rewritten into label references; reg cells were expanded from the stock
- * tree's 1/1 addressing to this tree's 2/2 /soc addressing.  Labels are
- * m_-prefixed because the 129 factory-dtbo sink labels own the stock ones.
+ * tree's 1/1 addressing to this tree's 2/2 /soc addressing.  A node the
+ * factory dtbo names (`spmi_bus`, `battery_charger`, `ucsi`) keeps that
+ * label so the bootloader's merge lands in this node and not in a sink;
+ * the rest get m_-prefixed labels.
  */
 
-&msm_soc {
-	m_qcom_spmi_c42d000: qcom,spmi@c42d000 {
+&soc {
+	spmi_bus: qcom,spmi@c42d000 {
 		compatible = "qcom,spmi-pmic-arb";
 		reg = <0x0 0xc42d000 0x0 0x4000 0x0 0xc400000 0x0 0x3000 0x0 0xc500000 0x0 0x400000 0x0 0xc440000 0x0 0x80000 0x0 0xc4c0000 0x0 0x10000>;
 		reg-names = "cnfg\0core\0chnls\0obsrvr\0intr";
@@ -40,7 +42,7 @@
 		qcom,fuse-enable-bit = <0x12>;
 		#address-cells = <0x02>;
 		#size-cells = <0x00>;
-		depends-on-supply = <&m_qcom_spmi_c42d000>;
+		depends-on-supply = <&spmi_bus>;
 		depends-on2-supply = <&m_qcom_smb1394_debug_9>;
 		qcom,pmk8350-debug@0 {
 			compatible = "qcom,spmi-pmic";
@@ -111,10 +113,10 @@
 		qcom,pmic-glink-channel = "PMIC_RTR_ADSP_APPS";
 		qcom,subsys-name = "lpass";
 		qcom,protection-domain = "tms/servreg\0msm/adsp/charger_pd";
-		m_qcom_battery_charger: qcom,battery_charger {
+		battery_charger: qcom,battery_charger {
 			compatible = "qcom,battery-charger";
 		};
-		m_qcom_ucsi: qcom,ucsi {
+		ucsi: qcom,ucsi {
 			compatible = "qcom,ucsi-glink";
 		};
 		m_qcom_altmode: qcom,altmode {
@@ -135,7 +137,7 @@
 			compatible = "qcom,spmi-glink-debug";
 			#address-cells = <0x01>;
 			#size-cells = <0x00>;
-			depends-on-supply = <&m_qcom_spmi_c42d000>;
+			depends-on-supply = <&spmi_bus>;
 			spmi@0 {
 				reg = <0x00>;
 				#address-cells = <0x02>;

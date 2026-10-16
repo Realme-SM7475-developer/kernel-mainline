@@ -39,15 +39,19 @@ What it does:
   6. expands the direct /soc children's `reg` cells: the stock base's /soc is
      1-cell addressed (`reg = <addr size>`) while the mainline board's /soc is
      2-cell (`<hi addr lo size>`), so 1/1 cells become 2/2 ones;
-  7. emits the fragment as `&msm_soc { ... }` with a `m_`-prefixed label on
-     every migrated node that something references.  The `m_` prefix is
-     mandatory: the 129 factory-dtbo sink labels already occupy their names
-     and must not be reused.
+  7. labels every migrated node that something references.  When the factory
+     dtbo names the node - i.e. the node's stock path is what one of the
+     dtbo's `__fixups__` labels resolves to - that label is used verbatim, so
+     the bootloader's later merge into this tree lands in the real node.
+     Everything else gets an `m_`-prefixed label, which must not collide with
+     a label the abl-labels sink container still owns;
+  8. emits the fragment as `&soc { ... }`.
 
 Usage:
 
     tools/boot/gen-soc-spmi.py \
         --stock-vendor-boot mainline/prebulit/vendor_boot_a.img \
+        --stock-dtbo mainline/prebulit/dtbo_a.img \
         --output arch/arm64/boot/dts/qcom/sm7475-realme-gt-neo5-se-soc-spmi.dtsi
 
 The decompiled stock dts is never written next to the tree.
@@ -73,16 +77,16 @@ PHANDLE_PROPS = {
     "operating-points-v2", "interconnects", "interconnect-parent",
 }
 
-# Stock DTB paths -> label defined by the mainline board tree.  The three
-# vendor labels that were renamed in the mainline tree (soc/tlmm/apps_rsc) are
-# mapped to their msm_* replacements.  A stock path that is not listed here and
-# is not one of the migrated nodes cannot be referenced by label.
+# Stock DTB paths -> label defined by the mainline board tree.  These are the
+# nodes the stock tree owns and the board tree describes itself rather than
+# migrating; a stock path that is not listed here and is not one of the
+# migrated nodes cannot be referenced by label.
 KNOWN_TARGET_LABELS = {
-    "/soc": "msm_soc",
+    "/soc": "soc",
     "/soc/interrupt-controller@17100000": "intc",
     "/soc/interrupt-controller@b220000": "pdc",
-    "/soc/pinctrl@f000000": "msm_tlmm",
-    "/soc/rsc@17a00000": "msm_rsc",
+    "/soc/pinctrl@f000000": "tlmm",
+    "/soc/rsc@17a00000": "apps_rsc",
     "/soc/clock-controller@100000": "gcc",
 }
 
@@ -168,6 +172,61 @@ def pick_slot(region, msm_id):
         if fdt_root_u32(blob, b"qcom,msm-id") == [msm_id, 0x10000]:
             return offset, blob
     raise ValueError(f"no stock DTB slot carries qcom,msm-id <0x{msm_id:x} 0x10000>")
+
+
+DT_TABLE_MAGIC = 0xD7B7AB1E
+FDT_MAGIC_U32 = 0xD00DFEED
+
+
+def dt_entry_blob(data, index):
+    """Return one uncompressed Android DT table entry as a raw FDT blob."""
+    if len(data) < 32:
+        raise ValueError("truncated DT table header")
+    magic, total, header, entry_size, count, offset, page, version = \
+        struct.unpack_from(">8I", data)
+    if magic != DT_TABLE_MAGIC or version != 0:
+        raise ValueError("expected an uncompressed Android DT table v0")
+    if not 32 <= header <= total <= len(data) or entry_size < 32:
+        raise ValueError("invalid DT table sizes")
+    if not 0 <= index < count:
+        raise ValueError("DTBO index outside table")
+    size, start = struct.unpack_from(">2I", data, offset + index * entry_size)
+    if start < offset + entry_size * count or size < 40 or start + size > total:
+        raise ValueError("DTBO payload outside table")
+    blob = data[start:start + size]
+    if struct.unpack_from(">2I", blob) != (FDT_MAGIC_U32, size):
+        raise ValueError("entry is not one complete uncompressed FDT")
+    return blob
+
+
+def dtbo_fixup_labels(dtbo, index, dtc):
+    """The label list the factory dtbo's `__fixups__` asks the base to resolve.
+
+    Every fragment target and every external reference inside a fragment is
+    written as a label; the bootloader maps those labels through the base
+    DTB's /__symbols__, so the list doubles as the set of nodes the factory
+    overlay expects the base to have.
+    """
+    with tempfile.TemporaryDirectory(prefix="gen-soc-spmi-dtbo-") as temp_name:
+        temp = Path(temp_name)
+        (temp / "entry.dtbo").write_bytes(dt_entry_blob(dtbo.read_bytes(), index))
+        text = subprocess.run(
+            [dtc, "-I", "dtb", "-O", "dts", str(temp / "entry.dtbo")],
+            check=True, capture_output=True, text=True).stdout
+    labels, inside = [], False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line == "__fixups__ {":
+            inside = True
+        elif inside:
+            if line == "};":
+                break
+            match = re.match(r'([\w,-]+) = "', line)
+            if match:
+                labels.append(match.group(1))
+    if not labels:
+        raise ValueError("the selected dtbo entry carries no __fixups__")
+    return labels
 
 
 class Node:
@@ -268,6 +327,9 @@ def main():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     here = Path(__file__).resolve()
     parser.add_argument("--stock-vendor-boot", type=Path, required=True)
+    parser.add_argument("--stock-dtbo", type=Path, required=True)
+    parser.add_argument("--dtbo-index", type=int, default=0,
+                        help="factory dtbo entry whose labels the base must serve")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dtc", default="/usr/bin/dtc")
     parser.add_argument("--msm-id", default="0x24f")
@@ -298,6 +360,15 @@ def main():
     for key, value in sym_node.props:
         if value:
             symbols[key] = value.strip('"')
+
+    # --- the labels the factory dtbo expects this tree to carry ----------
+    # A migrated node the overlay names keeps that name; the bootloader merge
+    # then lands in the real node instead of in an abl-labels sink.
+    dtbo_label = {}
+    for name in dtbo_fixup_labels(args.stock_dtbo, args.dtbo_index, args.dtc):
+        path = symbols.get(name)
+        if path:
+            dtbo_label.setdefault(path, name)
 
     # --- select the SPMI/PMIC subsystem's /soc children -----------------
     soc = find(root, "/soc")
@@ -332,7 +403,7 @@ def main():
     for node in selected:
         for sub in node.walk():
             if sub.prop("phandle") or sub is node:
-                label = label_for(sub.name)
+                label = dtbo_label.get(sub.path) or label_for(sub.name)
                 while label in assigned and assigned[label] is not sub:
                     label += "_"
                 assigned[label] = sub
@@ -414,11 +485,13 @@ def main():
         " * 0xc400000.  Only the bus the stock /__symbols__ calls `spmi_bus` and the",
         " * factory dtbo overlays extend survives.  Raw phandle numbers were",
         " * rewritten into label references; reg cells were expanded from the stock",
-        " * tree's 1/1 addressing to this tree's 2/2 /soc addressing.  Labels are",
-        " * m_-prefixed because the 129 factory-dtbo sink labels own the stock ones.",
+        " * tree's 1/1 addressing to this tree's 2/2 /soc addressing.  A node the",
+        " * factory dtbo names (`spmi_bus`, `battery_charger`, `ucsi`) keeps that",
+        " * label so the bootloader's merge lands in this node and not in a sink;",
+        " * the rest get m_-prefixed labels.",
         " */",
         "",
-        "&msm_soc {",
+        "&soc {",
     ]
 
     def emit(node, depth):
