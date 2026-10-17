@@ -23,6 +23,18 @@
 # rsync 到无空格的编译目录（默认 ~/.cache/sm7475-build/linux）再编译，
 # 每次运行都会同步改动；最终镜像仍写到含空格的 out 目录。
 #
+# 依赖说明（哪些随仓库发布、哪些要自备）：
+#   随仓库发布：本脚本、tools/boot/ 下的打包工具（mkbootimg.py、avbtool.py、
+#               mkdtboimg.py）以及全部 DTS/config 源。
+#   需自备：    1) clang/LLVM 工具链——内核按 LLVM=1 构建。工具链太大，不进仓库
+#                  （AOSP clang-r574158 约 3.4 GiB）。设置 CLANG_DIR 指向它，
+#                  或把 clang 放到 PATH 上；脚本会依次尝试。
+#               2) 原厂 dump 里的 boot_a.img / vendor_boot_a.img / dtbo_a.img，
+#                  打包时作为母本沿用其 vendor ramdisk/table/bootconfig。它们
+#                  既大又属厂商镜像，同样不进仓库，用 BASE_BOOT /
+#                  BASE_VENDOR_BOOT / BASE_DTBO 指向即可。
+#               3) 主机常规工具：make rsync python3 bison flex openssl。
+#
 # 用法：
 #   tools/build-sm7475.sh              # 同步+配置+编译+打包
 #   tools/build-sm7475.sh menuconfig   # 打开配置菜单
@@ -44,11 +56,11 @@ BUILD_SRC="${BUILD_SRC:-$BUILD_ROOT/linux}"
 JOBS="${JOBS:-$(nproc)}"
 ARCH="${ARCH:-arm64}"
 
-# AOSP/Android 工具链与打包工具（可用环境变量覆盖）
-CLANG_DIR="${CLANG_DIR:-/home/yukino/project/android/los23.2/prebuilts/clang/host/linux-x86/clang-r574158}"
-MKBOOTIMG="${MKBOOTIMG:-/home/yukino/project/android/los23.2/system/tools/mkbootimg/mkbootimg.py}"
-AVBTOOL="${AVBTOOL:-/home/yukino/project/android/los23.2/prebuilts/kernel-build-tools/linux-x86/bin/avbtool}"
-MKDTBOIMG="${MKDTBOIMG:-/home/yukino/project/android/los23.2/system/libufdt/utils/src/mkdtboimg.py}"
+# 打包工具：随仓库发布（tools/boot/），clone 下来即可用，不再依赖本机 AOSP 目录。
+# 可用环境变量覆盖。
+MKBOOTIMG="${MKBOOTIMG:-$SCRIPT_DIR/boot/mkbootimg.py}"
+AVBTOOL="${AVBTOOL:-$SCRIPT_DIR/boot/avbtool.py}"
+MKDTBOIMG="${MKDTBOIMG:-$SCRIPT_DIR/boot/mkdtboimg.py}"
 
 # 原厂 dump：作为 boot/vendor_boot 的封装母本，沿用其 vendor ramdisk/table/bootconfig
 BASE_BOOT="${BASE_BOOT:-$PROJECT_ROOT/mainline/prebulit/boot_a.img}"
@@ -73,15 +85,39 @@ KEY_DIR="$OUT_DIR/keys"
 FRAGMENT_REL="arch/$ARCH/configs/sm7475.config"
 
 export ARCH
-export PATH="$CLANG_DIR/bin:$PATH"
-MAKE=(make -C "$BUILD_SRC" LLVM=1 O="$O_DIR")
 
 log()  { printf '\033[1;32m==>\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 need() { [ -e "$1" ] || die "缺少文件: $1"; }
 
+# clang/LLVM 工具链。内核用 LLVM=1 构建，需要较新的 clang；但工具链不能随仓库
+# 发布——AOSP 的 clang-r574158 有 3.4 GiB，git 放不下。所以这里按顺序找：
+#   1) $CLANG_DIR
+#   2) 几个常见的 AOSP prebuilt 位置
+#   3) PATH 上已有的 clang
+# 找不到才报错，并在报错里说明怎么指定。
+resolve_clang() {
+	if [ -n "${CLANG_DIR:-}" ]; then
+		[ -x "$CLANG_DIR/bin/clang" ] && { printf '%s\n' "$CLANG_DIR"; return 0; }
+		die "CLANG_DIR=$CLANG_DIR 下没有 bin/clang"
+	fi
+	local c
+	for c in "$HOME"/project/android/*/prebuilts/clang/host/linux-x86/clang-* \
+	         /opt/clang-* /usr/lib/llvm-*; do
+		[ -x "$c/bin/clang" ] && { printf '%s\n' "$c"; return 0; }
+	done
+	if command -v clang >/dev/null 2>&1; then
+		printf '\n'; return 0	# 直接用 PATH 里的 clang
+	fi
+	die "找不到 clang：设置 CLANG_DIR=/path/to/clang-rXXXXXXX，或把 clang 加进 PATH"
+}
+CLANG_DIR="$(resolve_clang)"
+if [ -n "$CLANG_DIR" ]; then
+	export PATH="$CLANG_DIR/bin:$PATH"
+fi
+MAKE=(make -C "$BUILD_SRC" LLVM=1 O="$O_DIR")
+
 need "$KERNEL_ROOT/$FRAGMENT_REL"
-need "$CLANG_DIR/bin/clang"
 need "$MKBOOTIMG"
 need "$AVBTOOL"
 need "$MKDTBOIMG"
@@ -115,7 +151,7 @@ configure() {
 # 2. 编译内核与 DTB
 # ---------------------------------------------------------------------------
 build_kernel() {
-	log "编译内核 (clang: "$("$CLANG_DIR/bin/clang" --version | head -1)")"
+	log "编译内核 (clang: $(clang --version | head -1))"
 	"${MAKE[@]}" -j"$JOBS" Image dtbs
 	log "内核镜像: $O_DIR/arch/$ARCH/boot/Image"
 	log "设备树:   $O_DIR/arch/$ARCH/boot/dts/qcom/$BOARD.dtb"
