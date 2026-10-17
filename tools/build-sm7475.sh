@@ -33,6 +33,7 @@
 #
 # 每次编译都默认清空构建产物重编（见下方 clean_build），避免脏构建误导判断；
 # 只打包用 package，它不清。并发默认 24，可用 JOBS 覆盖。
+# 整份输出同时落盘到 $BUILD_ROOT/build.log（可用 LOG_FILE 覆盖或置空）。
 #
 # 可用环境变量覆盖：OUT_DIR BUILD_ROOT JOBS CLANG_DIR MKBOOTIMG AVBTOOL
 #                   MKDTBOIMG BASE_BOOT BASE_VENDOR_BOOT DTBO_PARTITION_SIZE
@@ -83,6 +84,20 @@ MAKE=(make -C "$BUILD_SRC" LLVM=1 O="$O_DIR")
 log()  { printf '\033[1;32m==>\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 need() { [ -e "$1" ] || die "缺少文件: $1"; }
+
+# ---------------------------------------------------------------------------
+# 日志落盘
+# ---------------------------------------------------------------------------
+# 终端照常显示，同时把整份输出写进 $LOG_FILE（默认 $BUILD_ROOT/build.log，每次
+# 覆盖）。没有这一步，一次失败的构建什么都不剩——输出随终端一起消失，事后
+# 完全无从查起（"编译完到打包就闪退"那次就是这样，只能靠产物时间戳反推）。
+# 置空 LOG_FILE 可关掉。
+LOG_FILE="${LOG_FILE:-$BUILD_ROOT/build.log}"
+if [ -n "$LOG_FILE" ]; then
+	mkdir -p "$(dirname "$LOG_FILE")"
+	exec > >(tee "$LOG_FILE") 2>&1
+	log "日志落盘: $LOG_FILE"
+fi
 
 need "$KERNEL_ROOT/$FRAGMENT_REL"
 need "$CLANG_DIR/bin/clang"
