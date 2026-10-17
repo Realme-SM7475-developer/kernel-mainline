@@ -24,11 +24,15 @@
 # 每次运行都会同步改动；最终镜像仍写到含空格的 out 目录。
 #
 # 用法：
-#   tools/build-sm7475.sh              # 同步+配置+编译+打包
+#   tools/build-sm7475.sh              # 同步+清空+配置+编译+打包
 #   tools/build-sm7475.sh menuconfig   # 打开配置菜单
-#   tools/build-sm7475.sh kernel       # 只同步+配置+编译内核/DTB
+#   tools/build-sm7475.sh kernel       # 只同步+清空+配置+编译内核/DTB
 #   tools/build-sm7475.sh package      # 只打包（复用已有内核产物）
 #   tools/build-sm7475.sh sync         # 只同步源码
+#   tools/build-sm7475.sh clean        # 只清空构建产物
+#
+# 每次编译都默认清空构建产物重编（见下方 clean_build），避免脏构建误导判断；
+# 只打包用 package，它不清。并发默认 24，可用 JOBS 覆盖。
 #
 # 可用环境变量覆盖：OUT_DIR BUILD_ROOT JOBS CLANG_DIR MKBOOTIMG AVBTOOL
 #                   MKDTBOIMG BASE_BOOT BASE_VENDOR_BOOT DTBO_PARTITION_SIZE
@@ -41,7 +45,7 @@ PROJECT_ROOT="$(cd "$KERNEL_ROOT/.." && pwd)"
 OUT_DIR="${OUT_DIR:-$PROJECT_ROOT/out}"
 BUILD_ROOT="${BUILD_ROOT:-$HOME/.cache/sm7475-build}"
 BUILD_SRC="${BUILD_SRC:-$BUILD_ROOT/linux}"
-JOBS="${JOBS:-$(nproc)}"
+JOBS="${JOBS:-24}"
 ARCH="${ARCH:-arm64}"
 
 # AOSP/Android 工具链与打包工具（可用环境变量覆盖）
@@ -219,11 +223,27 @@ package() {
 	ls -lh "$OUT_DIR"/boot.img "$OUT_DIR"/vendor_boot.img "$OUT_DIR"/dtbo.img
 }
 
+# ---------------------------------------------------------------------------
+# 0.5 每次构建前清空构建产物
+# ---------------------------------------------------------------------------
+# 这台机器上 DTS/config 改动很频繁，脏构建（上一轮留下的 .config、残留的 .o、
+# 过期的 DTB）很容易把"改动没生效"误判成"改错了"。所以默认每次都从零编：
+# 直接删掉无空格编译目录里的 kbuild 输出目录；源码副本由 rsync 负责刷新，
+# out/ 里的镜像由打包步骤重写、AVB 密钥保留不动。
+clean_build() {
+	case "$O_DIR" in
+		""|"/"|"$HOME"|"$HOME/") die "拒绝清理可疑路径: '$O_DIR'" ;;
+	esac
+	log "清空构建产物 -> $O_DIR"
+	rm -rf -- "$O_DIR"
+}
+
 case "${1:-all}" in
 	sync)       sync_source ;;
-	menuconfig) sync_source; configure; "${MAKE[@]}" menuconfig ;;
-	kernel)     sync_source; configure; build_kernel ;;
+	clean)      clean_build ;;
+	menuconfig) sync_source; clean_build; configure; "${MAKE[@]}" menuconfig ;;
+	kernel)     sync_source; clean_build; configure; build_kernel ;;
 	package)    package ;;
-	all|"")     sync_source; configure; build_kernel; package ;;
+	all|"")     sync_source; clean_build; configure; build_kernel; package ;;
 	*)          die "未知参数: $1" ;;
 esac
