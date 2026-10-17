@@ -9,6 +9,8 @@
 #include "sm7475-realme-gt-neo5-se-stock-nodes.dtsi"
 /* Batch 1 of the /soc migration (SPMI/PMIC subsystem); see the file. */
 #include "sm7475-realme-gt-neo5-se-soc-spmi.dtsi"
+/* The UFS host and PHY; see the file. */
+#include "sm7475-realme-gt-neo5-se-ufs.dtsi"
 
 / {
 	model = "realme GT Neo5 SE";

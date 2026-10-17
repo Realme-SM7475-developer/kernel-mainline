@@ -96,13 +96,17 @@ ARB_COMPATIBLE = "qcom,spmi-pmic-arb"
 
 # /soc children the bootloader is expected to walk by path while it updates the
 # tree it hands the kernel, even though the factory dtbo does not merge into
-# them: the UFS host is the boot device the bootloader names in
-# androidboot.bootdevice/boot_devices, its PHY is the sibling it pairs with it,
-# and msm-imem is the region the bootloader/QSEE write.  Migrating them keeps
-# those paths present in our tree the way the stock base has them.
+# them: msm-imem is the region the bootloader/QSEE writes.  Migrating it keeps
+# that path present in our tree the way the stock base has it.
+#
+# The UFS host and its QMP PHY also belong to that set - the bootloader names
+# the host in androidboot.bootdevice/boot_devices - but they are NOT migrated
+# here: the phandle rewriting below only labels the first cell of each <...>
+# group, so their `clocks` property (phandle and clock id interleaved) came out
+# with raw phandle values left behind, and the PHY has no `compatible` in the
+# stock base at all, which leaves it without a driver.  Both nodes are
+# hand-written in sm7475-realme-gt-neo5-se-ufs.dtsi instead.
 EXTRA_PATHS = {
-    "/soc/ufshc@1d84000",
-    "/soc/ufsphy_mem@1d80000",
     "/soc/qcom,msm-imem@146aa000",
 }
 

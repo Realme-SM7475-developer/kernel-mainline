@@ -16,7 +16,10 @@
  *   ramoops_mem, video_mem, adsp_mem       sm7475.dtsi (/reserved-memory regions)
  *   aliases                                sm7475-realme-gt-neo5-se.dts
  *   spmi_bus, battery_charger, ucsi        sm7475-realme-gt-neo5-se-soc-spmi.dtsi
- *   ufshc_mem, ufsphy_mem                  sm7475-realme-gt-neo5-se-soc-spmi.dtsi
+ *   L5B, L10C, L7B, L9B, gcc_ufs_phy_gdsc sm7475-realme-gt-neo5-se-ufs.dtsi
+ *                                          (UFS rails, fixed always-on)
+ *   ufshc_mem, ufsphy_mem                  sunk below (NOT on the real UFS
+ *                                          nodes - see the comment there)
  *   firmware, CPU0, CPU4, CPU7             re-declared below
  *
  * Only the labels with no real node left get an empty node inside the isolated
@@ -27,9 +30,17 @@
 
 / {
 	abl_overlay_sink {
+		/* The factory dtbo's fragment@18/fragment@19 target the UFS PHY
+		 * and host, and their content OVERWRITES what our nodes say -
+		 * measured on the device, the PHY's `compatible` came back as the
+		 * downstream string "qcom,ufs-phy-qmp-v4-cape", which no mainline
+		 * driver matches, so the PHY could never bind.  Both labels stay
+		 * here instead; the real nodes carry private labels and are used
+		 * by the bootloader only through androidboot.bootdevice. */
+		ufshc_mem: ufs-host-sink { };
+		ufsphy_mem: ufs-phy-sink { };
 		APC1_pause: abl-sym-0 { };
 		BOB: abl-sym-1 { };
-		L10C: abl-sym-5 { };
 		L12C: abl-sym-6 { };
 		L13C: abl-sym-7 { };
 		L1D: abl-sym-8 { };
@@ -37,10 +48,7 @@
 		L2C: abl-sym-10 { };
 		L3C: abl-sym-11 { };
 		L4H: abl-sym-12 { };
-		L5B: abl-sym-13 { };
 		L6C: abl-sym-14 { };
-		L7B: abl-sym-15 { };
-		L9B: abl-sym-16 { };
 		L9C: abl-sym-17 { };
 		S10B: abl-sym-18 { };
 		S12B: abl-sym-19 { };
@@ -68,7 +76,6 @@
 		display_fps: abl-sym-45 { };
 		eusb2_phy0: abl-sym-46 { };
 		fsa4480: abl-sym-48 { };
-		gcc_ufs_phy_gdsc: abl-sym-49 { };
 		i2c_freq_100Khz_cci0: abl-sym-50 { };
 		i2c_freq_1Mhz_cci0: abl-sym-51 { };
 		i2c_freq_1Mhz_cci1: abl-sym-52 { };
