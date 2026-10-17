@@ -1,0 +1,177 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/*
+ * USB (USB2 peripheral gadget) for the SM7475 board tree.
+ *
+ * Why this file exists: the board has no serial console wired up and adb is not
+ * available in a mainline initramfs, so the only usable debug channel is a USB
+ * gadget CDC-ACM port that a plain host terminal can talk to (/dev/ttyACM0).
+ * To get that, the DWC3 controller and its USB2 PHY have to bind, and neither
+ * node exists in the mainline sm7475 tree at all.
+ *
+ * The stock base (vendor_boot slot msm-id 0x24f) describes the same hardware
+ * with downstream drivers only:
+ *
+ *   ssusb@a600000   qcom,dwc-usb3-msm
+ *   hsphy@88e3000   qcom,usb-snps-eusb2-phy
+ *   ssphy@88e8000   qcom,usb-ssphy-qmp-dp-combo
+ *
+ * none of which a mainline kernel matches.  So this file describes the nodes
+ * the mainline bindings want, the same way sm7475-realme-gt-neo5-se-ufs.dtsi
+ * does for UFS: registers, interrupts, clock and reset ids come from the stock
+ * base, the clock references use this tree's labels and the dt-bindings macros,
+ * and the downstream-only properties are dropped.
+ *
+ * It is deliberately HS-only (USB2).  The SS/DP combo PHY would need
+ * CONFIG_PHY_QCOM_QMP_COMBO (currently =m, and there is no module loader) plus
+ * an orientation switch and DP wiring that bring nothing to a debug console, so
+ * only the USB2 PHY is described and DWC3 is told to stop looking for the pipe
+ * clock (qcom,select-utmi-as-pipe-clk).  dwc3_qcom_probe() then calls
+ * dwc3_qcom_select_utmi_clk(), which is exactly the supported "no SSPHY, HS/FS/
+ * LS only" configuration.
+ *
+ * Status: the DWC3 and gadget side works end to end - the controller binds, the
+ * gadget binds to the UDC, the host enumerates the device far enough to see it
+ * (at high-speed and, when forced, full-speed) and an initramfs shell is ready
+ * on ttyGS0 - but enumeration never finishes: every ep0 control transfer times
+ * out with EPROTO (-71).
+ *
+ * The PHY is a Synopsys **eUSB2** PHY, and getting the driver right took two
+ * wrong turns worth recording.  The first version of this file used the femto
+ * HS PHY (qcom,usb-snps-hs-7nm-phy, what sm8450 uses) and the second the M31
+ * eUSB2 driver carrying sm8750 data.  Both bind, both bring the link up, and
+ * both leave ep0 dead, because both program registers this silicon does not
+ * have - the M31 readback check fails outright on USB_PHY_XCFGI_7_0
+ * (PLL_LOCK_TIME), a field this revision will not clear.
+ *
+ * The correct driver is the generic one, drivers/phy/phy-snps-eusb2.c
+ * (qcom,sm8550-snps-eusb2-phy).  It is what the mainline port of this same SoC
+ * (marble, i.e. POCO F5 / Redmi Note 12 Turbo) uses, and the stock node matches
+ * it property for property: reg 0x88e3000 0x154, `vdd` + `vdda12` rails, a
+ * single `ref` clock (the XO) and GCC_QUSB2PHY_PRIM_BCR as the reset.  That
+ * 0x154 window is itself the tell - the M31 tables wanted registers past 0x17c.
+ *
+ * That driver also accepts a companion eUSB2 repeater (`phys = <&...>`), but it
+ * is optional (devm_of_phy_optional_get) and this board does not describe one
+ * the way marble does: marble pairs the PHY with an external NXP PTN3222
+ * redriver on I2C, whereas the stock realme tree points its `usb-repeater`
+ * property at syscon@162128 - a GCC register, i.e. an SoC-internal repeater.
+ * So `phys` is deliberately left out here.  If the repeater does turn out to
+ * need enabling, that GCC register is the place to look.
+ *
+ * Note that a `usb-nop-xceiv` node could not have stood in for a repeater
+ * either: phy-core returns -ENODEV for that compatible by design
+ * (drivers/phy/phy-core.c, _of_phy_get).
+ *
+ * Labels: the stock labels `usb0` and `eusb2_phy0` are NOT used here.  The
+ * factory dtbo has fragment@23 targeting `eusb2_phy0` (adds dummy-supply and
+ * usb-repeater) and fragment@24 targeting `usb0` (adds usb-role-switch, a
+ * dwc3@a600000 child and a port/endpoint).  The bootloader merges those into
+ * whatever node holds the label, and the UFS experience shows that merge
+ * overwrites properties - a downstream `compatible` landing on our PHY would
+ * unbind it for good.  The labels therefore stay on the empty sink nodes in
+ * sm7475-realme-gt-neo5-se-abl-labels.dtsi and the real nodes carry the private
+ * labels usb_dwc3 / usb_hs_phy.
+ */
+
+/*
+ * The M31 eUSB2 PHY asks for two rails.  They are PMIC regulators in the stock
+ * tree and the PMIC is not described yet, but the bootloader leaves USB powered
+ * (it is how the phone is flashed), so fixed always-on regulators are both
+ * honest and sufficient: the driver only enables them and reads voltages.
+ * The stock node pins the vdd level at 880 mV (qcom,vdd-voltage-level = 0.88 V).
+ */
+/ {
+	usb_hs_vdd: regulator-usb-hs-vdd {
+		compatible = "regulator-fixed";
+		regulator-name = "usb-hs-vdd-0p88";
+		regulator-min-microvolt = <880000>;
+		regulator-max-microvolt = <880000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	usb_hs_vdda12: regulator-usb-hs-vdda12 {
+		compatible = "regulator-fixed";
+		regulator-name = "usb-hs-vdda12-1p2";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+};
+
+&soc {
+	/* USB2 Synopsys eUSB2 PHY - the same node shape the working mainline
+	 * marble port of this SoC uses.  The stock 0x154 window is kept as-is:
+	 * it is also the tell that this is this PHY and not the M31 one, whose
+	 * tables reach past 0x17c.  No `phys` (repeater) reference is given;
+	 * see the file header for why. */
+	usb_hs_phy: phy@88e3000 {
+		compatible = "qcom,sm8475-snps-eusb2-phy",
+			     "qcom,sm8550-snps-eusb2-phy";
+		reg = <0x088e3000 0x154>;
+		#phy-cells = <0x00>;
+		clocks = <&rpmhcc RPMH_CXO_CLK>;
+		clock-names = "ref";
+		resets = <&gcc GCC_QUSB2PHY_PRIM_BCR>;
+		vdd-supply = <&usb_hs_vdd>;
+		vdda12-supply = <&usb_hs_vdda12>;
+		status = "okay";
+	};
+
+	/* DWC3 glue.  Since 6.x dwc3-qcom no longer needs a `snps,dwc3` child
+	 * node - dwc3_qcom_probe() calls dwc3_core_probe() on the glue node
+	 * itself - so the core is described by the same node.  reg has to span
+	 * the glue's qscratch window at 0xf8800 (+0x400), which is why the
+	 * stock 1 MiB core_base window is kept rather than a core-sized one. */
+	usb_dwc3: usb@a600000 {
+		compatible = "qcom,sm8450-dwc3", "qcom,snps-dwc3";
+		reg = <0x0a600000 0x100000>;
+
+		clocks = <&gcc GCC_CFG_NOC_USB3_PRIM_AXI_CLK>,
+			 <&gcc GCC_USB30_PRIM_MASTER_CLK>,
+			 <&gcc GCC_AGGRE_USB3_PRIM_AXI_CLK>,
+			 <&gcc GCC_USB30_PRIM_SLEEP_CLK>,
+			 <&gcc GCC_USB30_PRIM_MOCK_UTMI_CLK>,
+			 <&gcc GCC_USB3_0_CLKREF_EN>;
+		clock-names = "cfg_noc", "core", "iface", "sleep", "mock_utmi",
+			      "xo";
+
+		assigned-clocks = <&gcc GCC_USB30_PRIM_MOCK_UTMI_CLK>,
+				  <&gcc GCC_USB30_PRIM_MASTER_CLK>;
+		assigned-clock-rates = <19200000>, <200000000>;
+
+		/* Only the GIC-wired interrupts; the stock node additionally has
+		 * dp/dm-hs-phy and ss-phy lines on the PDC, all of which
+		 * dwc3-qcom fetches with *_byname_optional and which HS-only mode
+		 * has no use for.  Index 0 is the DWC3 core's own interrupt. */
+		interrupts-extended = <&intc GIC_SPI 133 IRQ_TYPE_LEVEL_HIGH>,
+				      <&intc GIC_SPI 130 IRQ_TYPE_LEVEL_HIGH>,
+				      <&intc GIC_SPI 131 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "dwc_usb3", "pwr_event", "hs_phy_irq";
+
+		power-domains = <&gcc USB30_PRIM_GDSC>;
+		resets = <&gcc GCC_USB30_PRIM_BCR>;
+
+		phys = <&usb_hs_phy>;
+		phy-names = "usb2-phy";
+		/* Force device mode: no extcon, no typec, no role switch.  The
+		 * stock node runs at super-speed-plus but there is no SS PHY here,
+		 * so cap it at high-speed.  A full-speed run was tried while
+		 * chasing the ep0 failure and behaved identically, which is what
+		 * ruled out an HS-specific (PLL / FSEL) cause. */
+		dr_mode = "peripheral";
+		maximum-speed = "high-speed";
+		/* HS-only: take the pipe clock from UTMI instead of the SSPHY. */
+		qcom,select-utmi-as-pipe-clk;
+
+		/* Shows up in /sys/firmware/devicetree/base, so the initramfs can
+		 * tell which image is actually booted. */
+		realme,dtb-rev = "usb-eusb2-1";
+
+		snps,dis_u2_susphy_quirk;
+		snps,dis_enblslpm_quirk;
+		snps,has-lpm-erratum;
+		status = "okay";
+	};
+};

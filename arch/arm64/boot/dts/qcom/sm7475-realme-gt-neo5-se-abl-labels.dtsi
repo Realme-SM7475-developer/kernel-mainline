@@ -40,7 +40,9 @@
 		ufshc_mem: ufs-host-sink { };
 		ufsphy_mem: ufs-phy-sink { };
 		APC1_pause: abl-sym-0 { };
-		BOB: abl-sym-1 { };
+		/* BOB: the factory dtbo only *consumes* this label (as vin-supply of
+		 * its camera LDOs), so it must resolve to a node that has a driver;
+		 * the rail lives in sm7475-realme-gt-neo5-se.dts now. */
 		L12C: abl-sym-6 { };
 		L13C: abl-sym-7 { };
 		L1D: abl-sym-8 { };
@@ -51,7 +53,8 @@
 		L6C: abl-sym-14 { };
 		L9C: abl-sym-17 { };
 		S10B: abl-sym-18 { };
-		S12B: abl-sym-19 { };
+		/* S12B: same as BOB - only consumed by the factory dtbo (camera
+		 * LDO vin-supply), so it needs a real rail; see the board .dts. */
 		adsp_loader: abl-sym-20 { };
 		apps_smmu: abl-sym-24 { };
 		audio_gpr: abl-sym-25 { };

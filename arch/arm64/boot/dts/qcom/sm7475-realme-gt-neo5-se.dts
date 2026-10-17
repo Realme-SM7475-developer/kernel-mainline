@@ -11,6 +11,8 @@
 #include "sm7475-realme-gt-neo5-se-soc-spmi.dtsi"
 /* The UFS host and PHY; see the file. */
 #include "sm7475-realme-gt-neo5-se-ufs.dtsi"
+/* USB2 (DWC3 + HS PHY) for the gadget debug console; see the file. */
+#include "sm7475-realme-gt-neo5-se-usb.dtsi"
 
 / {
 	model = "realme GT Neo5 SE";
@@ -50,6 +52,51 @@
 	chosen: chosen {
 		bootargs = "console=ttyMSM0,115200n8 console=tty0 quiet oops=panic clk_ignore_unused regulator_ignore_unused";
 		stdout-path = "serial0:115200n8";
+	};
+
+	/*
+	 * Rails the factory dtbo consumes but this tree cannot drive yet.
+	 *
+	 * The dtbo's camera LDOs (fragment@82: gpio-regulator@0/@1) take their
+	 * vin-supply from S12B (pm8350 S12) and BOB (pm8350c BOB), and its
+	 * wcd938x codec takes cdc-vdd-mic-bias-supply from BOB.  Those labels
+	 * used to sit on empty sink nodes in sm7475-realme-gt-neo5-se-abl-
+	 * labels.dtsi, so the supplies resolved to a node with no driver and
+	 * both LDOs sat in deferred probe forever:
+	 *
+	 *   deferred probe pending: platform: wait for supplier
+	 *                           /abl_overlay_sink/abl-sym-1
+	 *
+	 * The dtbo only *consumes* these labels (it never merges content into
+	 * them), so - exactly as with the UFS rails - they move onto real nodes
+	 * here.  The rails are PMIC/RPMH regulators the bootloader leaves
+	 * enabled (it boots from a rail-controlled UFS), so until the PMIC is
+	 * described they are modelled as fixed always-on.
+	 *
+	 * reg-fixed-voltage rejects a node with min != max outright
+	 * ("Fixed regulator specified with variable voltages", -EINVAL), so each
+	 * rail gets a single level rather than the stock node's supported
+	 * window: S12B takes the stock node's own qcom,init-voltage (0x132a40),
+	 * BOB the bottom of its window because the stock node carries no plain
+	 * init value for it.  The real level stays whatever the PMIC has it set
+	 * to; the drivers only read it and enable the supply.
+	 */
+	BOB: regulator-bob {
+		compatible = "regulator-fixed";
+		regulator-name = "pm8350c_bob";
+		regulator-min-microvolt = <3008000>;
+		regulator-max-microvolt = <3008000>;
+		regulator-always-on;
+		regulator-boot-on;
+	};
+
+	S12B: regulator-s12b {
+		compatible = "regulator-fixed";
+		regulator-name = "pm8350_s12";
+		regulator-min-microvolt = <1256000>;
+		regulator-max-microvolt = <1256000>;
+		regulator-always-on;
+		regulator-boot-on;
 	};
 };
 &qupv3_0 {
