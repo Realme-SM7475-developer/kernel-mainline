@@ -88,11 +88,6 @@
 		lpass_cdc: abl-sym-56 { };
 		lpass_core_hw_vote: abl-sym-57 { };
 		lpi_tlmm: abl-sym-58 { };
-		mdss_dsi0: abl-sym-59 { };
-		mdss_dsi1: abl-sym-60 { };
-		mdss_dsi_phy0: abl-sym-61 { };
-		mdss_dsi_phy1: abl-sym-62 { };
-		mdss_mdp: abl-sym-63 { };
 		modem_lte_dsc: abl-sym-64 { };
 		modem_nr_dsc: abl-sym-65 { };
 		modem_nr_scg_dsc: abl-sym-66 { };

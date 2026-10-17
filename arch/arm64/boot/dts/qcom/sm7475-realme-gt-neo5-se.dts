@@ -3,6 +3,7 @@
 /dts-v1/;
 
 #include "sm7475.dtsi"
+#include <dt-bindings/gpio/gpio.h>
 /* Labels the bootloader needs to merge the factory dtbo overlays; see the file. */
 #include "sm7475-realme-gt-neo5-se-abl-labels.dtsi"
 /* Top-level nodes the stock base has and the bootloader may fix up; see the file. */
@@ -98,6 +99,84 @@
 		regulator-always-on;
 		regulator-boot-on;
 	};
+
+	/* Panel rails are presently fixed because the PMIC regulator map is not
+	 * exposed by the mainline board description yet. */
+	display_vddio: regulator-display-vddio {
+		compatible = "regulator-fixed";
+		regulator-name = "display_vddio";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-boot-on;
+	};
+
+	display_vddd: regulator-display-vddd {
+		compatible = "regulator-fixed";
+		regulator-name = "display_vddd";
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+		regulator-boot-on;
+	};
+
+	display_vci: regulator-display-vci {
+		compatible = "regulator-fixed";
+		regulator-name = "display_vci";
+		regulator-min-microvolt = <3000000>;
+		regulator-max-microvolt = <3000000>;
+		regulator-boot-on;
+	};
+};
+
+&mdss {
+	status = "okay";
+};
+
+&mdss_mdp {
+	status = "okay";
+};
+
+&mdss_dsi0 {
+	pinctrl-names = "default", "sleep";
+	pinctrl-0 = <&display_dsi_active>;
+	pinctrl-1 = <&display_dsi_suspend>;
+	status = "okay";
+
+	panel@0 {
+		compatible = "realme,gt-neo5-se-nt37705";
+		reg = <0>;
+		reset-gpios = <&tlmm 3 GPIO_ACTIVE_LOW>;
+		vddio-supply = <&display_vddio>;
+		vddd-supply = <&display_vddd>;
+		vci-supply = <&display_vci>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			port@0 {
+				reg = <0>;
+				panel_in: endpoint {
+					remote-endpoint = <&mdss_dsi0_out>;
+				};
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	data-lanes = <0 1 2 3>;
+	remote-endpoint = <&panel_in>;
+};
+
+&mdss_dsi0_phy {
+	status = "okay";
+};
+
+&mdss_dsi1 {
+	status = "disabled";
+};
+
+&mdss_dsi1_phy {
+	status = "disabled";
 };
 &qupv3_0 {
 	status = "okay";
@@ -121,6 +200,20 @@
 
 	uart7_sleep: uart7-sleep-state {
 		pins = "gpio26", "gpio27";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
+	display_dsi_active: display-dsi-active-state {
+		pins = "gpio3";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	display_dsi_suspend: display-dsi-suspend-state {
+		pins = "gpio3";
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-down;
