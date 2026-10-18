@@ -100,6 +100,15 @@
 		regulator-boot-on;
 	};
 
+	/* The DSI PHY is powered from PM8350 L5 (stock init voltage: 880 mV). */
+	display_phy_vdds: regulator-display-phy-vdds {
+		compatible = "regulator-fixed";
+		regulator-name = "display_phy_vdds";
+		regulator-min-microvolt = <880000>;
+		regulator-max-microvolt = <880000>;
+		regulator-boot-on;
+	};
+
 	/* Panel rails are presently fixed because the PMIC regulator map is not
 	 * exposed by the mainline board description yet. */
 	display_vddio: regulator-display-vddio {
@@ -110,9 +119,9 @@
 		regulator-boot-on;
 	};
 
-	display_vddd: regulator-display-vddd {
+	display_extvdd: regulator-display-extvdd {
 		compatible = "regulator-fixed";
-		regulator-name = "display_vddd";
+		regulator-name = "display_extvdd";
 		regulator-min-microvolt = <1200000>;
 		regulator-max-microvolt = <1200000>;
 		regulator-boot-on;
@@ -144,9 +153,9 @@
 	panel@0 {
 		compatible = "realme,gt-neo5-se-nt37705";
 		reg = <0>;
-		reset-gpios = <&tlmm 3 GPIO_ACTIVE_LOW>;
+		reset-gpios = <&tlmm 3 GPIO_ACTIVE_HIGH>;
 		vddio-supply = <&display_vddio>;
-		vddd-supply = <&display_vddd>;
+		extvdd-supply = <&display_extvdd>;
 		vci-supply = <&display_vci>;
 
 		ports {
@@ -168,6 +177,7 @@
 };
 
 &mdss_dsi0_phy {
+	vdds-supply = <&display_phy_vdds>;
 	status = "okay";
 };
 
