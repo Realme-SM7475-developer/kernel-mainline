@@ -53,4 +53,15 @@
 			};
 		};
 	};
+
+	fragment@1 {
+		target = <&ramoops_mem>;
+		__overlay__ {
+			reg = <0x09 0x7c5c0000 0x00 0x00240000>;
+			no-map;
+			record-size = <0x00080000>;
+			console-size = <0x00040000>;
+			pmsg-size = <0x00040000>;
+		};
+	};
 };

@@ -419,9 +419,11 @@
 		};
 		ramoops_mem: ramoops_region {
 			compatible = "ramoops";
-			alloc-ranges = <0x00 0x00 0xffffffff 0xffffffff>;
-			size = <0x00 0x200000>;
-			pmsg-size = <0x200000>;
+			reg = <0x09 0x7c5c0000 0x00 0x00240000>;
+			no-map;
+			record-size = <0x00080000>;
+			console-size = <0x00040000>;
+			pmsg-size = <0x00040000>;
 			mem-type = <0x02>;
 		};
 		mem_dump_region {
