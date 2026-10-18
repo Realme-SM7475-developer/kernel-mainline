@@ -415,19 +415,22 @@ static struct msm_mdss *msm_mdss_init(struct platform_device *pdev, bool is_mdp5
 
 	mdss_data = of_device_get_match_data(&pdev->dev);
 	if (!mdss_data)
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(dev_err_probe(&pdev->dev, -EINVAL,
+					     "missing MDSS match data\n"));
 
 	msm_mdss->reg_bus_bw = mdss_data->reg_bus_bw;
 
 	msm_mdss->mmio = devm_platform_ioremap_resource_byname(pdev, is_mdp5 ? "mdss_phys" : "mdss");
 	if (IS_ERR(msm_mdss->mmio))
-		return ERR_CAST(msm_mdss->mmio);
+		return ERR_PTR(dev_err_probe(&pdev->dev, PTR_ERR(msm_mdss->mmio),
+					     "failed to map MDSS registers\n"));
 
 	dev_dbg(&pdev->dev, "mapped mdss address space @%p\n", msm_mdss->mmio);
 
 	ret = msm_mdss_parse_data_bus_icc_path(&pdev->dev, msm_mdss);
 	if (ret)
-		return ERR_PTR(ret);
+		return ERR_PTR(dev_err_probe(&pdev->dev, ret,
+					     "failed to acquire MDSS interconnects\n"));
 
 	if (is_mdp5)
 		ret = mdp5_mdss_parse_clock(pdev, &msm_mdss->clocks);
@@ -444,7 +447,8 @@ static struct msm_mdss *msm_mdss_init(struct platform_device *pdev, bool is_mdp5
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
-		return ERR_PTR(irq);
+		return ERR_PTR(dev_err_probe(&pdev->dev, irq,
+					     "failed to get MDSS IRQ\n"));
 
 	ret = _msm_mdss_irq_domain_add(msm_mdss);
 	if (ret)

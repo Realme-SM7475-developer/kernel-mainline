@@ -60,6 +60,9 @@ BASE_BOOT="${BASE_BOOT:-$PROJECT_ROOT/mainline/prebulit/boot_a.img}"
 BASE_VENDOR_BOOT="${BASE_VENDOR_BOOT:-$PROJECT_ROOT/mainline/prebulit/vendor_boot_a.img}"
 # 原厂 dtbo：其 3 条 dt_table_entry 会被逐字节保留，显示管线才不会被 bootloader 关掉
 BASE_DTBO="${BASE_DTBO:-$PROJECT_ROOT/mainline/prebulit/dtbo_a.img}"
+DEBUG_RAMDISK_TOOL="$PROJECT_ROOT/mainline/tools/mkirfs.py"
+DEBUG_RAMDISK="$PROJECT_ROOT/mainline/tools/initramfs.cpio.gz"
+VENDOR_RAMDISK_OVERLAY="$PROJECT_ROOT/mainline/tools/overlay_vendor_ramdisk.py"
 
 # dtbo 分区实际大小（0x1800000 = 24 MiB），打包时补齐，避免只覆盖分区开头
 DTBO_PARTITION_SIZE="${DTBO_PARTITION_SIZE:-25165824}"
@@ -234,6 +237,15 @@ package() {
 		--avbtool "$AVBTOOL" \
 		--boot-avb-key "$KEY_DIR/boot.key" \
 		--output-dir "$OUT_DIR" >/dev/null
+	# Keep the ACM shell in vendor_boot; the stock ramdisk cannot provide this
+	# early-boot debugging console on the current mainline image.
+	need "$DEBUG_RAMDISK_TOOL"
+	need "$VENDOR_RAMDISK_OVERLAY"
+	python3 "$DEBUG_RAMDISK_TOOL"
+	need "$DEBUG_RAMDISK"
+	python3 "$VENDOR_RAMDISK_OVERLAY" \
+		"$OUT_DIR/vendor_boot.img" "$DEBUG_RAMDISK" \
+		"$KEY_DIR/vendor.key" "$AVBTOOL"
 	log "完成，产物："
 	ls -lh "$OUT_DIR"/boot.img "$OUT_DIR"/vendor_boot.img "$OUT_DIR"/dtbo.img
 }
