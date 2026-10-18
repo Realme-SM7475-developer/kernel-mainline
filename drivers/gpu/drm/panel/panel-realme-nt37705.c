@@ -207,8 +207,8 @@ static int realme_nt37705_unprepare(struct drm_panel *panel)
 static const struct drm_display_mode realme_nt37705_mode = {
 	.clock = 455016,
 	.hdisplay = 1240,
-	.hsync_start = 1290,
-	.hsync_end = 1298,
+	.hsync_start = 1304,
+	.hsync_end = 1312,
 	.htotal = 1362,
 	.vdisplay = 2772,
 	.vsync_start = 2774,
@@ -279,7 +279,7 @@ static int realme_nt37705_probe(struct mipi_dsi_device *dsi)
 	dsi->mode_flags = MIPI_DSI_MODE_LPM;
 	dsi->dsc = &ctx->dsc;
 	ctx->dsc.dsc_version_major = 1;
-	ctx->dsc.dsc_version_minor = 2;
+	ctx->dsc.dsc_version_minor = 1;
 	ctx->dsc.slice_height = 12;
 	ctx->dsc.slice_width = 620;
 	ctx->dsc.slice_count = 2;
