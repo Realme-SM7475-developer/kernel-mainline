@@ -140,11 +140,11 @@
 	status = "okay";
 };
 
-&mdss_mdp {
+&mainline_mdss_mdp {
 	status = "okay";
 };
 
-&mdss_dsi0 {
+&mainline_mdss_dsi0 {
 	pinctrl-names = "default", "sleep";
 	pinctrl-0 = <&display_dsi_active>;
 	pinctrl-1 = <&display_dsi_suspend>;
@@ -176,16 +176,16 @@
 	remote-endpoint = <&panel_in>;
 };
 
-&mdss_dsi0_phy {
+&mainline_mdss_dsi0_phy {
 	vdds-supply = <&display_phy_vdds>;
 	status = "okay";
 };
 
-&mdss_dsi1 {
+&mainline_mdss_dsi1 {
 	status = "disabled";
 };
 
-&mdss_dsi1_phy {
+&mainline_mdss_dsi1_phy {
 	status = "disabled";
 };
 &qupv3_0 {
