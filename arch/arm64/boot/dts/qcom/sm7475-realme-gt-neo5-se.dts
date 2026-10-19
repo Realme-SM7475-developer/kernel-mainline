@@ -165,7 +165,8 @@
 	panel@0 {
 		compatible = "realme,gt-neo5-se-nt37705";
 		reg = <0>;
-		reset-gpios = <&tlmm 3 GPIO_ACTIVE_LOW>;
+		/* Stock FDT encodes the panel reset GPIO as active-high (flags = 0). */
+		reset-gpios = <&tlmm 3 GPIO_ACTIVE_HIGH>;
 		vddio-supply = <&display_vddio>;
 		extvdd-supply = <&display_extvdd>;
 		vci-supply = <&display_vci>;
