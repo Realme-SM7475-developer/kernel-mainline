@@ -31,18 +31,19 @@ static inline struct realme_nt37705 *to_realme_nt37705(struct drm_panel *panel)
 
 static void realme_nt37705_reset(struct realme_nt37705 *ctx)
 {
-	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
-	usleep_range(2000, 2500);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
 	usleep_range(2000, 2500);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+	usleep_range(2000, 2500);
+	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
 	msleep(20);
 }
 
 static int realme_nt37705_on(struct realme_nt37705 *ctx)
 {
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
-	struct drm_dsc_picture_parameter_set pps;
+
+	ctx->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x07);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xb4, 0xc0, 0x80, 0x80, 0x80,
@@ -141,10 +142,6 @@ static int realme_nt37705_on(struct realme_nt37705 *ctx)
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd2, 0x02, 0x00, 0x10, 0x05, 0x82);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x11, 0x00);
 	mipi_dsi_msleep(&dsi_ctx, 128);
-	drm_dsc_pps_payload_pack(&pps, &ctx->dsc);
-	mipi_dsi_picture_parameter_set_multi(&dsi_ctx, &pps);
-	mipi_dsi_compression_mode_multi(&dsi_ctx, true);
-	mipi_dsi_msleep(&dsi_ctx, 28);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x2f, 0x00);
 	mipi_dsi_msleep(&dsi_ctx, 17);
@@ -166,6 +163,7 @@ static int realme_nt37705_off(struct realme_nt37705 *ctx)
 {
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
 
+	ctx->dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MIPI_DCS_SET_DISPLAY_OFF);
 	mipi_dsi_msleep(&dsi_ctx, 20);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MIPI_DCS_ENTER_SLEEP_MODE);
@@ -177,6 +175,8 @@ static int realme_nt37705_off(struct realme_nt37705 *ctx)
 static int realme_nt37705_prepare(struct drm_panel *panel)
 {
 	struct realme_nt37705 *ctx = to_realme_nt37705(panel);
+	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
+	struct drm_dsc_picture_parameter_set pps;
 	int ret;
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
@@ -185,11 +185,23 @@ static int realme_nt37705_prepare(struct drm_panel *panel)
 
 	realme_nt37705_reset(ctx);
 	ret = realme_nt37705_on(ctx);
-	if (ret) {
-		gpiod_set_value_cansleep(ctx->reset_gpio, 0);
-		regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
-	}
+	if (ret < 0)
+		goto err_disable_supplies;
 
+	/* This panel accepts PPS and DSC enable after its vendor init sequence. */
+	drm_dsc_pps_payload_pack(&pps, &ctx->dsc);
+	mipi_dsi_picture_parameter_set_multi(&dsi_ctx, &pps);
+	mipi_dsi_compression_mode_multi(&dsi_ctx, true);
+	ret = dsi_ctx.accum_err;
+	if (ret < 0)
+		goto err_disable_supplies;
+
+	msleep(28);
+	return 0;
+
+err_disable_supplies:
+	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+	regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
 	return ret;
 }
 
@@ -198,7 +210,7 @@ static int realme_nt37705_unprepare(struct drm_panel *panel)
 	struct realme_nt37705 *ctx = to_realme_nt37705(panel);
 
 	realme_nt37705_off(ctx);
-	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
+	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
 	regulator_bulk_disable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
 
 	return 0;
@@ -234,10 +246,14 @@ static const struct drm_panel_funcs realme_nt37705_panel_funcs = {
 static int realme_nt37705_bl_update_status(struct backlight_device *bl)
 {
 	struct mipi_dsi_device *dsi = bl_get_data(bl);
+	int ret;
 
 	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
-	return mipi_dsi_dcs_set_display_brightness_large(dsi,
-		backlight_get_brightness(bl));
+	ret = mipi_dsi_dcs_set_display_brightness_large(dsi,
+							 backlight_get_brightness(bl));
+	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
+
+	return ret;
 }
 
 static const struct backlight_ops realme_nt37705_bl_ops = {
@@ -269,7 +285,7 @@ static int realme_nt37705_probe(struct mipi_dsi_device *dsi)
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to get panel supplies\n");
 
-	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
+	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(ctx->reset_gpio))
 		return dev_err_probe(dev, PTR_ERR(ctx->reset_gpio),
 				     "failed to get reset GPIO\n");
@@ -277,7 +293,8 @@ static int realme_nt37705_probe(struct mipi_dsi_device *dsi)
 	ctx->dsi = dsi;
 	dsi->lanes = 4;
 	dsi->format = MIPI_DSI_FMT_RGB888;
-	dsi->mode_flags = MIPI_DSI_MODE_LPM;
+	dsi->mode_flags = MIPI_DSI_MODE_NO_EOT_PACKET |
+			  MIPI_DSI_CLOCK_NON_CONTINUOUS;
 	dsi->dsc = &ctx->dsc;
 	ctx->dsc.dsc_version_major = 1;
 	ctx->dsc.dsc_version_minor = 1;

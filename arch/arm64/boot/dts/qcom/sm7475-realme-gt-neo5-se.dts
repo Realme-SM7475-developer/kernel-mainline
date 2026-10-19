@@ -165,7 +165,7 @@
 	panel@0 {
 		compatible = "realme,gt-neo5-se-nt37705";
 		reg = <0>;
-		reset-gpios = <&tlmm 3 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&tlmm 3 GPIO_ACTIVE_LOW>;
 		vddio-supply = <&display_vddio>;
 		extvdd-supply = <&display_extvdd>;
 		vci-supply = <&display_vci>;
