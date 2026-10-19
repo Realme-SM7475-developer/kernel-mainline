@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+/dts-v1/;
+/plugin/;
+
+/ {
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	qcom,pmic-id = <47 0 0 0 0 0 0 0 65 65>;
+	qcom,pmic-id-size = <10>;
+	model = "Qualcomm Technologies, Inc. Ukee MTP, Senna A";
+	compatible = "qcom,ukee-mtp", "qcom,ukee", "qcom,mtp";
+	qcom,msm-id = <0x24f 0x10000>;
+	qcom,board-id = <0x10008 0>;
+	oplus,project-id = <22737 22623>;
+
+	fragment@0 {
+		target = <&chosen>;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
+		__overlay__ {
+			#address-cells = <2>;
+			#size-cells = <2>;
+			ranges;
+
+			framebuffer@b8000000 {
+				compatible = "simple-framebuffer";
+				reg = <0x0 0xb8000000 0x0 0x2b00000>;
+				width = <1240>;
+				height = <2772>;
+				stride = <4960>;
+				format = "a8r8g8b8";
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&mdss>;
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+};
