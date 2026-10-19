@@ -21,7 +21,7 @@ struct realme_nt37705 {
 	struct mipi_dsi_device *dsi;
 	struct drm_dsc_config dsc;
 	struct gpio_desc *reset_gpio;
-	struct regulator_bulk_data supplies[3];
+	struct regulator_bulk_data supplies[4];
 };
 
 static inline struct realme_nt37705 *to_realme_nt37705(struct drm_panel *panel)
@@ -264,6 +264,7 @@ static int realme_nt37705_probe(struct mipi_dsi_device *dsi)
 	ctx->supplies[0].supply = "vddio";
 	ctx->supplies[1].supply = "extvdd";
 	ctx->supplies[2].supply = "vci";
+	ctx->supplies[3].supply = "avdd";
 	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(ctx->supplies), ctx->supplies);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to get panel supplies\n");

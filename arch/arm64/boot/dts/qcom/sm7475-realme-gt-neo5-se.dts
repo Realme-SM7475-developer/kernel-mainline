@@ -134,6 +134,19 @@
 		regulator-max-microvolt = <3000000>;
 		regulator-boot-on;
 	};
+
+	/* Stock display_gpio_regulator@1: 5.5 V panel AVDD, enabled by GPIO186. */
+	display_panel_avdd: regulator-display-panel-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "display_panel_avdd";
+		regulator-min-microvolt = <5500000>;
+		regulator-max-microvolt = <5500000>;
+		gpio = <&tlmm 186 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		pinctrl-names = "default";
+		pinctrl-0 = <&display_avdd_active>;
+		regulator-boot-on;
+	};
 };
 
 &mdss {
@@ -145,6 +158,10 @@
 };
 
 &mainline_mdss_dsi0 {
+	vdda-supply = <&display_extvdd>;
+	pinctrl-0 = <&display_reset_active>, <&display_te_active>;
+	pinctrl-1 = <&display_reset_sleep>, <&display_te_sleep>;
+	pinctrl-names = "default", "sleep";
 	status = "okay";
 
 	panel@0 {
@@ -154,6 +171,7 @@
 		vddio-supply = <&display_vddio>;
 		extvdd-supply = <&display_extvdd>;
 		vci-supply = <&display_vci>;
+		avdd-supply = <&display_panel_avdd>;
 
 		ports {
 			#address-cells = <1>;
@@ -170,6 +188,7 @@
 
 &mdss_dsi0_out {
 	data-lanes = <0 1 2 3>;
+	qcom,te-source = "mdp_vsync_p";
 	remote-endpoint = <&panel_in>;
 };
 
@@ -198,6 +217,44 @@
 };
 
 &tlmm {
+	display_avdd_active: display-avdd-active-state {
+		pins = "gpio186";
+		function = "gpio";
+		output-high;
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	/* Match stock Senna reset drive and suspend bias on GPIO3. */
+	display_reset_active: display-reset-active-state {
+		pins = "gpio3";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	display_reset_sleep: display-reset-sleep-state {
+		pins = "gpio3";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
+	/* Stock Senna routes the panel TE line (GPIO86) to DPU vsync. */
+	display_te_active: display-te-active-state {
+		pins = "gpio86";
+		function = "mdp_vsync";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
+	display_te_sleep: display-te-sleep-state {
+		pins = "gpio86";
+		function = "mdp_vsync";
+		drive-strength = <2>;
+		bias-pull-down;
+	};
+
 	uart7_default: uart7-default-state {
 		pins = "gpio26", "gpio27";
 		function = "qup7";
