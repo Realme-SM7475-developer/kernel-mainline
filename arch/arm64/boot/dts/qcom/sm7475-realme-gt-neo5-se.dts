@@ -157,8 +157,8 @@
 
 &mainline_mdss_dsi0 {
 	vdda-supply = <&display_extvdd>;
-	pinctrl-0 = <&display_reset_active>, <&display_te_active>;
-	pinctrl-1 = <&display_reset_sleep>, <&display_te_sleep>;
+	pinctrl-0 = <&display_te_active>;
+	pinctrl-1 = <&display_te_sleep>;
 	pinctrl-names = "default", "sleep";
 	status = "okay";
 
@@ -215,21 +215,6 @@
 };
 
 &tlmm {
-	/* Match stock Senna reset drive and suspend bias on GPIO3. */
-	display_reset_active: display-reset-active-state {
-		pins = "gpio3";
-		function = "gpio";
-		drive-strength = <8>;
-		bias-disable;
-	};
-
-	display_reset_sleep: display-reset-sleep-state {
-		pins = "gpio3";
-		function = "gpio";
-		drive-strength = <2>;
-		bias-pull-down;
-	};
-
 	/* Stock Senna routes the panel TE line (GPIO86) to DPU vsync. */
 	display_te_active: display-te-active-state {
 		pins = "gpio86";
