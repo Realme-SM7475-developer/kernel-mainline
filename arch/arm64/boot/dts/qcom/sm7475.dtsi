@@ -600,7 +600,7 @@
 		};
 
 		dispcc: clock-controller@af00000 {
-			compatible = "qcom,cape-dispcc";
+			compatible = "qcom,sm8475-dispcc";
 			reg = <0x0af00000 0x20000>;
 			clocks = <&rpmhcc RPMH_CXO_CLK>, <&rpmhcc RPMH_CXO_CLK_A>,
 				 <&gcc GCC_DISP_AHB_CLK>, <&sleep_clk>,
