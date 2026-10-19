@@ -5,6 +5,7 @@
 #include <dt-bindings/clock/qcom,sm8450-dispcc.h>
 #include <dt-bindings/clock/qcom,rpmh.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/power/qcom,rpmhpd.h>
 #include <dt-bindings/soc/qcom,rpmh-rsc.h>
 
 / {
@@ -419,7 +420,7 @@
 		};
 		ramoops_mem: ramoops_region {
 			compatible = "ramoops";
-			reg = <0x09 0x7c5c0000 0x00 0x00240000>;
+			reg = <0x09 0x7a5c0000 0x00 0x00240000>;
 			no-map;
 			record-size = <0x00080000>;
 			console-size = <0x00040000>;
@@ -497,6 +498,8 @@
 				clock-names = "bus", "nrt_bus", "iface", "lut", "core", "vsync";
 				assigned-clocks = <&dispcc DISP_CC_MDSS_VSYNC_CLK>;
 				assigned-clock-rates = <19200000>;
+				operating-points-v2 = <&mdp_opp_table>;
+				power-domains = <&rpmhpd RPMHPD_MMCX>;
 				interrupt-parent = <&mdss>;
 				interrupts = <0>;
 				ports {
@@ -507,6 +510,35 @@
 						dpu_intf1_out: endpoint {
 							remote-endpoint = <&mdss_dsi0_in>;
 						};
+					};
+				};
+
+				mdp_opp_table: opp-table {
+					compatible = "operating-points-v2";
+
+					opp-172000000 {
+						opp-hz = /bits/ 64 <172000000>;
+						required-opps = <&rpmhpd_opp_low_svs_d1>;
+					};
+
+					opp-200000000 {
+						opp-hz = /bits/ 64 <200000000>;
+						required-opps = <&rpmhpd_opp_low_svs>;
+					};
+
+					opp-325000000 {
+						opp-hz = /bits/ 64 <325000000>;
+						required-opps = <&rpmhpd_opp_svs>;
+					};
+
+					opp-375000000 {
+						opp-hz = /bits/ 64 <375000000>;
+						required-opps = <&rpmhpd_opp_svs_l1>;
+					};
+
+					opp-500000000 {
+						opp-hz = /bits/ 64 <500000000>;
+						required-opps = <&rpmhpd_opp_nom>;
 					};
 				};
 			};
@@ -528,6 +560,8 @@
 						  <&dispcc DISP_CC_MDSS_PCLK0_CLK_SRC>;
 				assigned-clock-parents = <&mainline_mdss_dsi0_phy DSI_BYTE_PLL_CLK>,
 							 <&mainline_mdss_dsi0_phy DSI_PIXEL_PLL_CLK>;
+				operating-points-v2 = <&mdss_dsi_opp_table>;
+				power-domains = <&rpmhpd RPMHPD_MMCX>;
 				phys = <&mainline_mdss_dsi0_phy>;
 				phy-names = "dsi";
 				#address-cells = <1>;
@@ -546,6 +580,25 @@
 						reg = <1>;
 						mdss_dsi0_out: endpoint {
 						};
+					};
+				};
+
+				mdss_dsi_opp_table: opp-table {
+					compatible = "operating-points-v2";
+
+					opp-187500000 {
+						opp-hz = /bits/ 64 <187500000>;
+						required-opps = <&rpmhpd_opp_low_svs>;
+					};
+
+					opp-300000000 {
+						opp-hz = /bits/ 64 <300000000>;
+						required-opps = <&rpmhpd_opp_svs>;
+					};
+
+					opp-358000000 {
+						opp-hz = /bits/ 64 <358000000>;
+						required-opps = <&rpmhpd_opp_svs_l1>;
 					};
 				};
 			};
@@ -579,6 +632,8 @@
 						  <&dispcc DISP_CC_MDSS_PCLK1_CLK_SRC>;
 				assigned-clock-parents = <&mainline_mdss_dsi1_phy DSI_BYTE_PLL_CLK>,
 							 <&mainline_mdss_dsi1_phy DSI_PIXEL_PLL_CLK>;
+				operating-points-v2 = <&mdss_dsi_opp_table>;
+				power-domains = <&rpmhpd RPMHPD_MMCX>;
 				phys = <&mainline_mdss_dsi1_phy>;
 				phy-names = "dsi";
 				#address-cells = <1>;
@@ -609,6 +664,8 @@
 				 <&mainline_mdss_dsi1_phy DSI_BYTE_PLL_CLK>,
 				 <&mainline_mdss_dsi1_phy DSI_PIXEL_PLL_CLK>,
 				 <0>, <0>, <0>, <0>, <0>, <0>, <0>, <0>;
+			power-domains = <&rpmhpd RPMHPD_MMCX>;
+			required-opps = <&rpmhpd_opp_low_svs>;
 			#clock-cells = <1>;
 			#reset-cells = <1>;
 			#power-domain-cells = <1>;
@@ -711,6 +768,44 @@
 				#clock-cells = <1>;
 				clocks = <&xo_board>;
 				clock-names = "xo";
+			};
+
+			rpmhpd: power-controller {
+				compatible = "qcom,sm8450-rpmhpd";
+				#power-domain-cells = <1>;
+				operating-points-v2 = <&rpmhpd_opp_table>;
+
+				rpmhpd_opp_table: opp-table {
+					compatible = "operating-points-v2";
+
+					rpmhpd_opp_ret: opp1 {
+						opp-level = <RPMH_REGULATOR_LEVEL_RETENTION>;
+					};
+
+					rpmhpd_opp_min_svs: opp2 {
+						opp-level = <RPMH_REGULATOR_LEVEL_MIN_SVS>;
+					};
+
+					rpmhpd_opp_low_svs_d1: opp3 {
+						opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS_D1>;
+					};
+
+					rpmhpd_opp_low_svs: opp4 {
+						opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
+					};
+
+					rpmhpd_opp_svs: opp5 {
+						opp-level = <RPMH_REGULATOR_LEVEL_SVS>;
+					};
+
+					rpmhpd_opp_svs_l1: opp6 {
+						opp-level = <RPMH_REGULATOR_LEVEL_SVS_L1>;
+					};
+
+					rpmhpd_opp_nom: opp7 {
+						opp-level = <RPMH_REGULATOR_LEVEL_NOM>;
+					};
+				};
 			};
 		};
 	};

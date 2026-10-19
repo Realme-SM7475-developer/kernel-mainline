@@ -183,18 +183,25 @@ static int realme_nt37705_prepare(struct drm_panel *panel)
 	if (ret)
 		return ret;
 
+	/* The stock panel supply table gives extvdd a 10 ms post-on delay. */
+	msleep(10);
+
 	realme_nt37705_reset(ctx);
 	ret = realme_nt37705_on(ctx);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(panel->dev, "panel initialization commands failed: %d\n", ret);
 		goto err_disable_supplies;
+	}
 
 	/* This panel accepts PPS and DSC enable after its vendor init sequence. */
 	drm_dsc_pps_payload_pack(&pps, &ctx->dsc);
 	mipi_dsi_picture_parameter_set_multi(&dsi_ctx, &pps);
 	mipi_dsi_compression_mode_multi(&dsi_ctx, true);
 	ret = dsi_ctx.accum_err;
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(panel->dev, "failed to configure DSC: %d\n", ret);
 		goto err_disable_supplies;
+	}
 
 	msleep(28);
 	return 0;

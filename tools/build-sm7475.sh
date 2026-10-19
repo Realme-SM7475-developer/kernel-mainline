@@ -77,8 +77,10 @@ CMDLINE="${CMDLINE:-console=ttyMSM0,115200n8 quiet oops=panic clk_ignore_unused 
 
 BOARD="sm7475-realme-gt-neo5-se"
 O_DIR="$BUILD_ROOT/kbuild"
+DTB_PATH="${DTB_PATH:-$O_DIR/arch/$ARCH/boot/dts/qcom/$BOARD.dtb}"
 KEY_DIR="$OUT_DIR/keys"
-FRAGMENT_REL="arch/$ARCH/configs/sm7475.config"
+FRAGMENT_REL="${FRAGMENT_REL:-arch/$ARCH/configs/sm7475.config}"
+EXTRA_FRAGMENT_REL="${EXTRA_FRAGMENT_REL:-}"
 
 export ARCH
 export PATH="$CLANG_DIR/bin:$PATH"
@@ -103,6 +105,9 @@ if [ -n "$LOG_FILE" ]; then
 fi
 
 need "$KERNEL_ROOT/$FRAGMENT_REL"
+if [ -n "$EXTRA_FRAGMENT_REL" ]; then
+	need "$KERNEL_ROOT/$EXTRA_FRAGMENT_REL"
+fi
 need "$CLANG_DIR/bin/clang"
 need "$MKBOOTIMG"
 need "$AVBTOOL"
@@ -127,8 +132,13 @@ sync_source() {
 configure() {
 	log "合并配置: defconfig + $FRAGMENT_REL"
 	"${MAKE[@]}" defconfig
+	local fragments=("$FRAGMENT_REL")
+	if [ -n "$EXTRA_FRAGMENT_REL" ]; then
+		log "追加配置 fragment: $EXTRA_FRAGMENT_REL"
+		fragments+=("$EXTRA_FRAGMENT_REL")
+	fi
 	( cd "$BUILD_SRC" && ARCH="$ARCH" LLVM=1 \
-	    scripts/kconfig/merge_config.sh -m -O "$O_DIR" "$O_DIR/.config" "$FRAGMENT_REL" )
+	    scripts/kconfig/merge_config.sh -m -O "$O_DIR" "$O_DIR/.config" "${fragments[@]}" )
 	"${MAKE[@]}" olddefconfig
 	log "配置文件: $O_DIR/.config"
 }
@@ -200,7 +210,7 @@ make_dtbo() {
 
 package() {
 	local image="$O_DIR/arch/$ARCH/boot/Image"
-	local dtb="$O_DIR/arch/$ARCH/boot/dts/qcom/$BOARD.dtb"
+	local dtb="$DTB_PATH"
 	need "$image"
 	need "$dtb"
 	make_keys

@@ -135,7 +135,7 @@
 		regulator-boot-on;
 	};
 
-	/* Stock display_gpio_regulator@1: 5.5 V panel AVDD, enabled by GPIO186. */
+	/* Stock panel AVDD is 5.5 V and is switched by TLMM GPIO 186. */
 	display_panel_avdd: regulator-display-panel-avdd {
 		compatible = "regulator-fixed";
 		regulator-name = "display_panel_avdd";
@@ -145,9 +145,11 @@
 		enable-active-high;
 		regulator-boot-on;
 	};
+
 };
 
 &mdss {
+	power-domains = <&dispcc MDSS_GDSC>;
 	status = "okay";
 };
 

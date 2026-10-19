@@ -41,7 +41,7 @@
 			/* 实测：boot 头里的 cmdline 不一定进内核（Android 的 cmdline
 			 * 实际来自 DTB /chosen/bootargs，由 bootloader 写入），所以这里
 			 * 直接往 /chosen 里塞 bootargs，确保 console=tty0 生效。 */
-			bootargs = "console=tty0 console=ttyMSM0,115200n8 loglevel=8 ignore_loglevel clk_ignore_unused regulator_ignore_unused initcall_blacklist=gcc_sm8450_init,cape_pinctrl_init";
+			bootargs = "console=tty0 console=ttyMSM0,115200n8 loglevel=8 ignore_loglevel clk_ignore_unused regulator_ignore_unused";
 
 			framebuffer@b8000000 {
 				compatible = "simple-framebuffer";
@@ -57,7 +57,7 @@
 	fragment@1 {
 		target = <&ramoops_mem>;
 		__overlay__ {
-			reg = <0x09 0x7c5c0000 0x00 0x00240000>;
+			reg = <0x09 0x7a5c0000 0x00 0x00240000>;
 			no-map;
 			record-size = <0x00080000>;
 			console-size = <0x00040000>;
