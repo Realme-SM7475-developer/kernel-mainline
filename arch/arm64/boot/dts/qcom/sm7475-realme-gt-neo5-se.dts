@@ -51,7 +51,7 @@
 	 * (see drivers/soc/qcom/sm7475-splashfb.c) and needs no framebuffer node.
 	 */
 	chosen: chosen {
-		bootargs = "console=ttyMSM0,115200n8 console=tty0 quiet oops=panic clk_ignore_unused regulator_ignore_unused";
+		bootargs = "console=ttyMSM0,115200n8 console=tty0 quiet clk_ignore_unused regulator_ignore_unused";
 		stdout-path = "serial0:115200n8";
 	};
 
@@ -135,7 +135,8 @@
 		regulator-boot-on;
 	};
 
-	/* Stock panel AVDD is 5.5 V and is switched by TLMM GPIO 186. */
+	/* Stock panel AVDD is a separate 5.5 V GPIO regulator, enabled at boot.
+	 * It is not part of the selected Senna panel-supply-entries table. */
 	display_panel_avdd: regulator-display-panel-avdd {
 		compatible = "regulator-fixed";
 		regulator-name = "display_panel_avdd";
@@ -143,6 +144,7 @@
 		regulator-max-microvolt = <5500000>;
 		gpio = <&tlmm 186 GPIO_ACTIVE_HIGH>;
 		enable-active-high;
+		regulator-always-on;
 		regulator-boot-on;
 	};
 
@@ -167,8 +169,8 @@
 	panel@0 {
 		compatible = "realme,gt-neo5-se-nt37705";
 		reg = <0>;
-		/* Stock FDT encodes the panel reset GPIO as active-high (flags = 0). */
-		reset-gpios = <&tlmm 3 GPIO_ACTIVE_HIGH>;
+		/* Map the driver's logical 0-1-0 sequence to the stock H-L-H pulse. */
+		reset-gpios = <&tlmm 3 GPIO_ACTIVE_LOW>;
 		vddio-supply = <&display_vddio>;
 		extvdd-supply = <&display_extvdd>;
 		vci-supply = <&display_vci>;

@@ -43,6 +43,7 @@ static int realme_nt37705_on(struct realme_nt37705 *ctx)
 {
 	struct mipi_dsi_multi_context dsi_ctx = { .dsi = ctx->dsi };
 
+	dev_info(&ctx->dsi->dev, "init: vendor sequence start\n");
 	ctx->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x07);
@@ -69,13 +70,16 @@ static int realme_nt37705_on(struct realme_nt37705 *ctx)
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xff, 0xaa, 0x55, 0xa5, 0x83);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6f, 0x12);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xfe, 0x41);
+	dev_info(&ctx->dsi->dev, "init: vendor page 0x07 complete err=%d\n",
+		 dsi_ctx.accum_err);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x5f, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x26, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x26, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x17, 0x10);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x2a, 0x00, 0x00, 0x04, 0xd7);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x2b, 0x00, 0x00, 0x0a, 0xd3);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x2f, 0x00);
+	/* The Senna panel uses its 144 Hz command-mode setting. */
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x2f, 0x02);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x35, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x44, 0x00, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x51, 0x00, 0x00);
@@ -119,6 +123,8 @@ static int realme_nt37705_on(struct realme_nt37705 *ctx)
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xff, 0xaa, 0x55, 0xa5, 0x83);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6f, 0x12);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xfe, 0x41);
+	dev_info(&ctx->dsi->dev, "init: vendor page 0x81 complete err=%d\n",
+		 dsi_ctx.accum_err);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xff, 0xaa, 0x55, 0xa5, 0x80);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6f, 0x19);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf2, 0x00);
@@ -140,20 +146,24 @@ static int realme_nt37705_on(struct realme_nt37705 *ctx)
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x01);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6f, 0x0e);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd2, 0x02, 0x00, 0x10, 0x05, 0x82);
+	dev_info(&ctx->dsi->dev, "init: sleep-out sequence complete err=%d\n",
+		 dsi_ctx.accum_err);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x11, 0x00);
 	mipi_dsi_msleep(&dsi_ctx, 128);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0, 0x55, 0xaa, 0x52, 0x08, 0x00);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x2f, 0x00);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x2f, 0x02);
 	mipi_dsi_msleep(&dsi_ctx, 17);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xbe, 0x47);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6f, 0xa8);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xba, 0x00, 0x00);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xba, 0x22, 0x22);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6f, 0xb0);
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xba, 0x00, 0x00, 0x00, 0x00);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xba, 0x22, 0x22, 0x00, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x2f, 0x30);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6d, 0x00);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x35, 0x00, 0x00, 0x00, 0x00);
 	mipi_dsi_dcs_set_display_on_multi(&dsi_ctx);
+	dev_info(&ctx->dsi->dev, "init: display-on sequence complete err=%d\n",
+		 dsi_ctx.accum_err);
 
 	return dsi_ctx.accum_err;
 }
@@ -179,14 +189,19 @@ static int realme_nt37705_prepare(struct drm_panel *panel)
 	struct drm_dsc_picture_parameter_set pps;
 	int ret;
 
+	dev_info(panel->dev, "prepare: enabling panel supplies\n");
 	ret = regulator_bulk_enable(ARRAY_SIZE(ctx->supplies), ctx->supplies);
-	if (ret)
+	if (ret) {
+		dev_err(panel->dev, "prepare: supply enable failed: %d\n", ret);
 		return ret;
+	}
+	dev_info(panel->dev, "prepare: panel supplies enabled\n");
 
 	/* The stock panel supply table gives extvdd a 10 ms post-on delay. */
 	msleep(10);
 
 	realme_nt37705_reset(ctx);
+	dev_info(panel->dev, "prepare: reset sequence complete\n");
 	ret = realme_nt37705_on(ctx);
 	if (ret < 0) {
 		dev_err(panel->dev, "panel initialization commands failed: %d\n", ret);
@@ -194,6 +209,7 @@ static int realme_nt37705_prepare(struct drm_panel *panel)
 	}
 
 	/* This panel accepts PPS and DSC enable after its vendor init sequence. */
+	dev_info(panel->dev, "prepare: sending DSC PPS\n");
 	drm_dsc_pps_payload_pack(&pps, &ctx->dsc);
 	mipi_dsi_picture_parameter_set_multi(&dsi_ctx, &pps);
 	mipi_dsi_compression_mode_multi(&dsi_ctx, true);
@@ -202,6 +218,7 @@ static int realme_nt37705_prepare(struct drm_panel *panel)
 		dev_err(panel->dev, "failed to configure DSC: %d\n", ret);
 		goto err_disable_supplies;
 	}
+	dev_info(panel->dev, "prepare: DSC configured\n");
 
 	msleep(28);
 	return 0;
@@ -224,11 +241,11 @@ static int realme_nt37705_unprepare(struct drm_panel *panel)
 }
 
 static const struct drm_display_mode realme_nt37705_mode = {
-	.clock = 455016,
+	.clock = (1240 + 64 + 8 + 48) * (2772 + 2 + 2 + 8) * 144 / 1000,
 	.hdisplay = 1240,
 	.hsync_start = 1304,
 	.hsync_end = 1312,
-	.htotal = 1362,
+	.htotal = 1360,
 	.vdisplay = 2772,
 	.vsync_start = 2774,
 	.vsync_end = 2776,
@@ -278,6 +295,7 @@ static int realme_nt37705_probe(struct mipi_dsi_device *dsi)
 	};
 	int ret;
 
+	dev_info(dev, "probe: NT37705 panel driver matched\n");
 	ctx = devm_drm_panel_alloc(dev, struct realme_nt37705, panel,
 				  &realme_nt37705_panel_funcs,
 				  DRM_MODE_CONNECTOR_DSI);
@@ -289,13 +307,17 @@ static int realme_nt37705_probe(struct mipi_dsi_device *dsi)
 	ctx->supplies[2].supply = "vci";
 	ctx->supplies[3].supply = "avdd";
 	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(ctx->supplies), ctx->supplies);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "probe: panel supply lookup failed: %d\n", ret);
 		return dev_err_probe(dev, ret, "failed to get panel supplies\n");
+	}
+	dev_info(dev, "probe: panel supplies acquired\n");
 
 	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(ctx->reset_gpio))
 		return dev_err_probe(dev, PTR_ERR(ctx->reset_gpio),
 				     "failed to get reset GPIO\n");
+	dev_info(dev, "probe: reset GPIO acquired\n");
 
 	ctx->dsi = dsi;
 	dsi->lanes = 4;
@@ -329,6 +351,7 @@ static int realme_nt37705_probe(struct mipi_dsi_device *dsi)
 		drm_panel_remove(&ctx->panel);
 		return dev_err_probe(dev, ret, "failed to attach DSI host\n");
 	}
+	dev_info(dev, "probe: DSI host attached\n");
 
 	return 0;
 }
