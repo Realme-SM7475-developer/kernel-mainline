@@ -4,6 +4,8 @@
 #include <dt-bindings/clock/qcom,dsi-phy-28nm.h>
 #include <dt-bindings/clock/qcom,sm8450-dispcc.h>
 #include <dt-bindings/clock/qcom,rpmh.h>
+#include <dt-bindings/interconnect/qcom,icc.h>
+#include <dt-bindings/interconnect/qcom,sm8450.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/power/qcom,rpmhpd.h>
 #include <dt-bindings/soc/qcom,rpmh-rsc.h>
@@ -14,6 +16,12 @@
 	interrupt-parent = <&intc>;
 
 	chosen { };
+
+	mainline_mc_virt: interconnect-1 {
+		compatible = "qcom,sm8450-mc-virt";
+		#interconnect-cells = <2>;
+		qcom,bcm-voters = <&mainline_apps_bcm_voter>;
+	};
 
 	clocks {
 		xo_board: xo-board {
@@ -466,11 +474,43 @@
 			#power-domain-cells = <1>;
 		};
 
+		/* Waipio NoC resources and addresses match the stock SM7475 DTB. */
+		mainline_config_noc: interconnect@1500000 {
+			compatible = "qcom,sm8450-config-noc";
+			reg = <0x01500000 0x1c000>;
+			#interconnect-cells = <2>;
+			qcom,bcm-voters = <&mainline_apps_bcm_voter>;
+		};
+
+		mainline_mmss_noc: interconnect@1740000 {
+			compatible = "qcom,sm8450-mmss-noc";
+			reg = <0x01740000 0x1f080>;
+			#interconnect-cells = <2>;
+			qcom,bcm-voters = <&mainline_apps_bcm_voter>;
+		};
+
+		mainline_gem_noc: interconnect@19100000 {
+			compatible = "qcom,sm8450-gem-noc";
+			reg = <0x19100000 0xbb800>;
+			#interconnect-cells = <2>;
+			qcom,bcm-voters = <&mainline_apps_bcm_voter>;
+		};
+
 		/* Cape uses the SM8450 display register layout. */
 		mdss: display-subsystem@ae00000 {
 			compatible = "qcom,sm8450-mdss";
 			reg = <0x0ae00000 0x1000>;
 			reg-names = "mdss";
+			/* Both display memory ports share the same Waipio path. */
+			interconnects = <&mainline_mmss_noc MASTER_MDP_DISP 0
+					 &mainline_mc_virt SLAVE_EBI1_DISP 0>,
+					<&mainline_mmss_noc MASTER_MDP_DISP 0
+					 &mainline_mc_virt SLAVE_EBI1_DISP 0>,
+					<&mainline_gem_noc MASTER_APPSS_PROC
+					 QCOM_ICC_TAG_ACTIVE_ONLY
+					 &mainline_config_noc SLAVE_DISPLAY_CFG
+					 QCOM_ICC_TAG_ACTIVE_ONLY>;
+			interconnect-names = "mdp0-mem", "mdp1-mem", "cpu-cfg";
 			resets = <&dispcc DISP_CC_MDSS_CORE_BCR>;
 			clocks = <&dispcc DISP_CC_MDSS_AHB_CLK>,
 				 <&gcc GCC_DISP_HF_AXI_CLK>,
@@ -874,6 +914,10 @@
 			qcom,tcs-config = <ACTIVE_TCS 3>, <SLEEP_TCS 2>,
 					  <WAKE_TCS 2>, <CONTROL_TCS 0>;
 			power-domains = <&cluster_pd>;
+
+			mainline_apps_bcm_voter: bcm-voter {
+				compatible = "qcom,bcm-voter";
+			};
 
 			rpmhcc: clock-controller {
 				/* Waipio RPMh clock resources are shared with SM8450. */

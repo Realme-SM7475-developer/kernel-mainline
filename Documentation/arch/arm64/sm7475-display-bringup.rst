@@ -99,6 +99,29 @@ rejected, its source changes reverted, and the known ten-bit image
 selected for recovery. Reports about another NT37705 panel are not
 evidence that this panel supports the same eight-bit configuration.
 
+Display memory bandwidth
+========================
+
+The initial SM7475 tree omitted all interconnect providers and MDSS
+bandwidth paths; the live interconnect summary was empty. Add the
+Waipio MC, GEM, configuration and multimedia NoCs with an APPS BCM voter,
+and the standard MDSS mdp0-mem, mdp1-mem and cpu-cfg paths. The stock DTB
+uses these NoC addresses, and the live command DB contains the expected
+MC0, SH0, SH1, CN0, MM0 and MM1 resources.
+
+With these providers present, the 2026-10-20 22:48 kernel boots to the USB
+shell and registers the display requests in the interconnect summary.
+The user still reports grey black levels and text distortion. DMA reads
+remain empty, and a DMA brightness write followed by FIFO readback does
+not change the panel setting. Temporarily voting 400 MB/s on both SF
+memory routes also does not restore DMA; the temporary votes and consumer
+overlay were removed afterwards. These bandwidth paths repair a missing
+platform resource, but are not a display-quality or command-DMA fix.
+
+Some suppliers still report sync_state pending on legacy camera nodes.
+Their aggregate bandwidth can retain initial constraints; distinguish
+the individual display requests from these aggregate values.
+
 Build and recovery
 ==================
 
