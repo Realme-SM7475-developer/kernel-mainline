@@ -28,6 +28,7 @@ ARM64 Architecture
     ptdump
     silicon-errata
     sme
+    sm7475-display-bringup
     sve
     tagged-address-abi
     tagged-pointers

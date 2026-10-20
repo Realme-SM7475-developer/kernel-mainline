@@ -11,6 +11,15 @@ maintainers:
 
 allOf:
   - $ref: dsi-phy-common.yaml#
+  - if:
+      required:
+        - qcom,dphy-tuning
+    then:
+      properties:
+        compatible:
+          const: qcom,sm7475-dsi-phy-5nm
+        phy-type:
+          const: 10
 
 properties:
   compatible:
@@ -21,6 +30,7 @@ properties:
       - qcom,sar2130p-dsi-phy-5nm
       - qcom,sc7280-dsi-phy-7nm
       - qcom,sm6375-dsi-phy-7nm
+      - qcom,sm7475-dsi-phy-5nm
       - qcom,sm8350-dsi-phy-5nm
       - qcom,sm8450-dsi-phy-5nm
       - qcom,sm8550-dsi-phy-4nm
@@ -47,6 +57,20 @@ properties:
     description: D-PHY (default) or C-PHY mode
     enum: [ 10, 11 ]
     default: 10
+
+  qcom,dphy-tuning:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    description: |
+      Board-specific D-PHY analog settings for the SM7475 v4.3.2 PHY.
+      Values program VREG_CTRL_0, GLBL_HSTX_STR_CTRL_0 and
+      GLBL_STR_SWI_CAL_SEL_CTRL respectively. Omit for the SoC defaults.
+    items:
+      - description: Internal regulator control
+        maximum: 255
+      - description: High-speed transmitter drive strength
+        maximum: 255
+      - description: Drive-strength calibration selection
+        maximum: 255
 
 required:
   - compatible

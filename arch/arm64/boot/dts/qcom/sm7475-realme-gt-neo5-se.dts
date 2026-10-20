@@ -4,6 +4,7 @@
 
 #include "sm7475.dtsi"
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator.h>
 /* Labels the bootloader needs to merge the factory dtbo overlays; see the file. */
 #include "sm7475-realme-gt-neo5-se-abl-labels.dtsi"
 /* Top-level nodes the stock base has and the bootloader may fix up; see the file. */
@@ -100,54 +101,95 @@
 		regulator-boot-on;
 	};
 
-	/* The DSI PHY is powered from PM8350 L5 (stock init voltage: 880 mV). */
-	display_phy_vdds: regulator-display-phy-vdds {
-		compatible = "regulator-fixed";
-		regulator-name = "display_phy_vdds";
-		regulator-min-microvolt = <880000>;
-		regulator-max-microvolt = <880000>;
-		regulator-boot-on;
-	};
-
-	/* Panel rails are presently fixed because the PMIC regulator map is not
-	 * exposed by the mainline board description yet. */
-	display_vddio: regulator-display-vddio {
-		compatible = "regulator-fixed";
-		regulator-name = "display_vddio";
-		regulator-min-microvolt = <1800000>;
-		regulator-max-microvolt = <1800000>;
-		regulator-boot-on;
-	};
-
-	display_extvdd: regulator-display-extvdd {
-		compatible = "regulator-fixed";
-		regulator-name = "display_extvdd";
-		regulator-min-microvolt = <1200000>;
-		regulator-max-microvolt = <1200000>;
-		regulator-boot-on;
-	};
-
-	display_vci: regulator-display-vci {
-		compatible = "regulator-fixed";
-		regulator-name = "display_vci";
-		regulator-min-microvolt = <3000000>;
-		regulator-max-microvolt = <3000000>;
-		regulator-boot-on;
-	};
-
-	/* Stock panel AVDD is a separate 5.5 V GPIO regulator, enabled at boot.
-	 * It is not part of the selected Senna panel-supply-entries table. */
+	/* The factory AVDD placeholder has no GPIO/pinctrl hookup on Senna.
+	 * Preserve its diagnostic label without driving the unrelated GPIO186.
+	 */
 	display_panel_avdd: regulator-display-panel-avdd {
 		compatible = "regulator-fixed";
 		regulator-name = "display_panel_avdd";
 		regulator-min-microvolt = <5500000>;
 		regulator-max-microvolt = <5500000>;
-		gpio = <&tlmm 186 GPIO_ACTIVE_HIGH>;
-		enable-active-high;
-		regulator-always-on;
-		regulator-boot-on;
+		status = "disabled";
 	};
 
+};
+
+/*
+ * The copied stock phandle number is not valid after dtc reallocates phandles.
+ * SCM must probe before the Qualcomm SMMU implementation can bind.
+ */
+&{/firmware/qcom_scm} {
+	compatible = "qcom,scm-sm8450", "qcom,scm";
+	qcom,dload-mode = <&mainline_tcsr 0x13000>;
+	#reset-cells = <1>;
+};
+
+/* Stock display resources: ldob5, ldoc10/12/13 and ldod1. */
+&apps_rsc {
+	regulators-display-b {
+		compatible = "qcom,pm8350-rpmh-regulators";
+		qcom,pmic-id = "b";
+
+		display_phy_vdds: ldo5 {
+			qcom,always-wait-for-ack;
+			regulator-name = "display_phy_vdds";
+			regulator-min-microvolt = <880000>;
+			regulator-max-microvolt = <880000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			/* Shared with the USB/UFS PHYs, still using fixed rails. */
+			regulator-always-on;
+			regulator-boot-on;
+		};
+	};
+
+	regulators-display-c {
+		compatible = "qcom,pm8350c-rpmh-regulators";
+		qcom,pmic-id = "c";
+
+		display_host_vdda: ldo10 {
+			qcom,always-wait-for-ack;
+			regulator-name = "display_host_vdda";
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			/* The USB PHY also consumes PM8350C L10. */
+			regulator-always-on;
+			regulator-boot-on;
+		};
+
+		display_vddio: ldo12 {
+			qcom,always-wait-for-ack;
+			regulator-name = "display_vddio";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+		};
+
+		display_vci: ldo13 {
+			qcom,always-wait-for-ack;
+			regulator-name = "display_vci";
+			regulator-min-microvolt = <3000000>;
+			regulator-max-microvolt = <3000000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+		};
+	};
+
+	regulators-display-d {
+		/* PM8350B L1 uses the same PMIC5 NLDO programming as PM8350. */
+		compatible = "qcom,pm8350-rpmh-regulators";
+		qcom,pmic-id = "d";
+
+		display_extvdd: ldo1 {
+			qcom,always-wait-for-ack;
+			regulator-name = "display_extvdd";
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-boot-on;
+		};
+	};
 };
 
 &mdss {
@@ -161,7 +203,7 @@
 
 &mainline_mdss_dsi0 {
 	/* The stock DSI host rail is PM8350C L10 at 1.2 V (vdda-1p2). */
-	vdda-supply = <&display_extvdd>;
+	vdda-supply = <&display_host_vdda>;
 	pinctrl-0 = <&display_te_active>;
 	pinctrl-1 = <&display_te_sleep>;
 	pinctrl-names = "default", "sleep";
@@ -175,7 +217,6 @@
 		vddio-supply = <&display_vddio>;
 		extvdd-supply = <&display_extvdd>;
 		vci-supply = <&display_vci>;
-		avdd-supply = <&display_panel_avdd>;
 
 		ports {
 			#address-cells = <1>;
@@ -197,6 +238,8 @@
 };
 
 &mainline_mdss_dsi0_phy {
+	/* Stock Senna PHY v4.3.2 analog tuning (VREG0, HSTX, calibration). */
+	qcom,dphy-tuning = <0x45 0xbb 0x01>;
 	vdds-supply = <&display_phy_vdds>;
 	status = "okay";
 };

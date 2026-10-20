@@ -9,6 +9,7 @@
 #include <linux/err.h>
 #include <linux/interrupt.h>
 #include <linux/mfd/syscon.h>
+#include <linux/moduleparam.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
 #include <linux/of_irq.h>
@@ -33,6 +34,11 @@
 #include "phy/dsi_phy.h"
 
 #define DSI_RESET_TOGGLE_DELAY_MS 20
+
+/* Bring-up diagnostic: compare the command FIFO with memory-backed DMA. */
+static bool dsi_cmd_fifo;
+module_param(dsi_cmd_fifo, bool, 0600);
+MODULE_PARM_DESC(dsi_cmd_fifo, "Use the DSI 2.6 command FIFO for diagnostics");
 
 static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc_config *dsc);
 
@@ -166,6 +172,7 @@ struct msm_dsi_host {
 
 	struct drm_display_mode *mode;
 	struct drm_dsc_config *dsc;
+	unsigned int dsc_slice_per_pkt;
 
 	/* connected device info */
 	unsigned int channel;
@@ -910,17 +917,11 @@ static void dsi_update_dsc_timing(struct msm_dsi_host *msm_host, bool is_cmd_mod
 	slice_per_intf = dsc->slice_count;
 
 	total_bytes_per_intf = dsc->slice_chunk_size * slice_per_intf;
-	bytes_per_pkt = dsc->slice_chunk_size; /* * slice_per_pkt; */
+	bytes_per_pkt = dsc->slice_chunk_size * msm_host->dsc_slice_per_pkt;
 
 	eol_byte_num = total_bytes_per_intf % 3;
 
-	/*
-	 * Typically, pkt_per_line = slice_per_intf * slice_per_pkt.
-	 *
-	 * Since the current driver only supports slice_per_pkt = 1,
-	 * pkt_per_line will be equal to slice per intf for now.
-	 */
-	pkt_per_line = slice_per_intf;
+	pkt_per_line = slice_per_intf / msm_host->dsc_slice_per_pkt;
 
 	if (is_cmd_mode) /* packet data type */
 		reg = DSI_COMMAND_COMPRESSION_MODE_CTRL_STREAM0_DATATYPE(MIPI_DSI_DCS_LONG_WRITE);
@@ -1067,14 +1068,8 @@ static void dsi_timing_setup(struct msm_dsi_host *msm_host, bool is_bonded_dsi)
 		if (!msm_host->dsc)
 			wc = hdisplay * mipi_dsi_pixel_format_to_bpp(msm_host->format) / 8 + 1;
 		else
-			/*
-			 * When DSC is enabled, WC = slice_chunk_size * slice_per_pkt + 1.
-			 * Currently, the driver only supports default value of slice_per_pkt = 1
-			 *
-			 * TODO: Expand mipi_dsi_device struct to hold slice_per_pkt info
-			 *       and adjust DSC math to account for slice_per_pkt.
-			 */
-			wc = msm_host->dsc->slice_chunk_size + 1;
+			wc = msm_host->dsc->slice_chunk_size *
+				msm_host->dsc_slice_per_pkt + 1;
 
 		dsi_write(msm_host, REG_DSI_CMD_MDP_STREAM0_CTRL,
 			DSI_CMD_MDP_STREAM0_CTRL_WORD_COUNT(wc) |
@@ -1406,6 +1401,12 @@ static int dsi_cmd_dma_tx(struct msm_dsi_host *msm_host, int len)
 	int ret;
 	uint64_t dma_base;
 	bool triggered;
+	bool fifo = dsi_cmd_fifo &&
+		cfg_hnd->major == MSM_DSI_VER_MAJOR_6G &&
+		cfg_hnd->minor == MSM_DSI_6G_VER_MINOR_V2_6_0 &&
+		msm_host->id == 0 && len <= 256;
+	u32 *data;
+	int i;
 
 	ret = cfg_hnd->ops->dma_base_get(msm_host, &dma_base);
 	if (ret) {
@@ -1417,8 +1418,31 @@ static int dsi_cmd_dma_tx(struct msm_dsi_host *msm_host, int len)
 
 	dsi_wait4video_eng_busy(msm_host);
 
-	triggered = msm_dsi_manager_cmd_xfer_trigger(
-						msm_host->id, dma_base, len);
+	if (fifo) {
+		data = cfg_hnd->ops->tx_buf_get(msm_host);
+		if (IS_ERR(data))
+			return PTR_ERR(data);
+
+		dsi_write(msm_host, REG_DSI_TEST_PATTERN_GEN_CTRL,
+			  DSI_TEST_PATTERN_GEN_CTRL_CMD_DMA_TPG_EN |
+			  DSI_TEST_PATTERN_GEN_CTRL_TPG_DMA_FIFO_MODE |
+			  DSI_TEST_PATTERN_GEN_CTRL_CMD_DMA_PATTERN_SEL(
+				  CMD_DMA_CUSTOM_PATTERN_DMA_FIFO));
+		for (i = 0; i < len / 4; i++)
+			dsi_write(msm_host, REG_DSI_TEST_PATTERN_GEN_CMD_DMA_INIT_VAL,
+				  data[i]);
+		if ((len / 4) & 1)
+			dsi_write(msm_host, REG_DSI_TEST_PATTERN_GEN_CMD_DMA_INIT_VAL, 0);
+		if (cfg_hnd->ops->tx_buf_put)
+			cfg_hnd->ops->tx_buf_put(msm_host);
+		dsi_write(msm_host, REG_DSI_DMA_LEN, len);
+		wmb(); /* Finish FIFO writes before triggering the transfer. */
+		dsi_write(msm_host, REG_DSI_TRIG_DMA, 1);
+		triggered = true;
+	} else {
+		triggered = msm_dsi_manager_cmd_xfer_trigger(
+					msm_host->id, dma_base, len);
+	}
 	if (triggered) {
 		ret = wait_for_completion_timeout(&msm_host->dma_comp,
 					msecs_to_jiffies(200));
@@ -1429,6 +1453,12 @@ static int dsi_cmd_dma_tx(struct msm_dsi_host *msm_host, int len)
 			ret = len;
 	} else {
 		ret = len;
+	}
+	if (fifo) {
+		dsi_write(msm_host, REG_DSI_TEST_PATTERN_GEN_CTRL, 0);
+		dsi_write(msm_host, REG_DSI_TPG_DMA_FIFO_RESET, 1);
+		udelay(1);
+		dsi_write(msm_host, REG_DSI_TPG_DMA_FIFO_RESET, 0);
 	}
 
 	return ret;
@@ -1679,6 +1709,12 @@ static int dsi_host_attach(struct mipi_dsi_host *host,
 	if (dsi->lanes > msm_host->num_data_lanes)
 		return -EINVAL;
 
+	msm_host->dsc_slice_per_pkt = dsi->dsc_slice_per_pkt ?: 1;
+	if (dsi->dsc &&
+	    (msm_host->dsc_slice_per_pkt > dsi->dsc->slice_count ||
+	     dsi->dsc->slice_count % msm_host->dsc_slice_per_pkt))
+		return -EINVAL;
+
 	msm_host->channel = dsi->channel;
 	msm_host->lanes = dsi->lanes;
 	msm_host->format = dsi->format;
@@ -1841,14 +1877,16 @@ static int dsi_populate_dsc_params(struct msm_dsi_host *msm_host, struct drm_dsc
 	dsc->convert_rgb = 1;
 	dsc->vbr_enable = 0;
 
-	drm_dsc_set_const_params(dsc);
-	drm_dsc_set_rc_buf_thresh(dsc);
+	/* Preserve RC parameters supplied by panels with DSC 1.1 SCR1. */
+	if (!dsc->rc_model_size) {
+		drm_dsc_set_const_params(dsc);
+		drm_dsc_set_rc_buf_thresh(dsc);
 
-	/* DPU supports only pre-SCR panels */
-	ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
-	if (ret) {
-		DRM_DEV_ERROR(&msm_host->pdev->dev, "could not find DSC RC parameters\n");
-		return ret;
+		ret = drm_dsc_setup_rc_params(dsc, DRM_DSC_1_1_PRE_SCR);
+		if (ret) {
+			DRM_DEV_ERROR(&msm_host->pdev->dev, "could not find DSC RC parameters\n");
+			return ret;
+		}
 	}
 
 	dsc->initial_scale_value = drm_dsc_initial_scale_value(dsc);
@@ -2222,6 +2260,12 @@ int msm_dsi_host_cmd_rx(struct mipi_dsi_host *host,
 			pr_err("%s: Read cmd Tx failed, too short: %d\n", __func__, ret);
 			return -ECOMM;
 		}
+		dev_info(&msm_host->pdev->dev,
+			 "RX cmd=%#x count=%#x data=%#x lane=%#x fifo=%d\n",
+			 *(u8 *)msg->tx_buf,
+			 dsi_read(msm_host, REG_DSI_RDBK_DATA_CTRL),
+			 dsi_read(msm_host, REG_DSI_RDBK_DATA(0)),
+			 dsi_read(msm_host, REG_DSI_LANE_STATUS), dsi_cmd_fifo);
 
 		/*
 		 * once cmd_dma_done interrupt received,

@@ -8,6 +8,7 @@
 #include <linux/clk.h>
 #include <linux/clk-provider.h>
 #include <linux/iopoll.h>
+#include <linux/of.h>
 
 #include "dsi_phy.h"
 #include "dsi.xml.h"
@@ -53,6 +54,8 @@
 #define DSI_PHY_7NM_QUIRK_V5_2		BIT(4)
 /* Hardware is V7.0 */
 #define DSI_PHY_7NM_QUIRK_V7_0		BIT(5)
+/* Hardware is V4.3.2, with revised analog regulator controls. */
+#define DSI_PHY_7NM_QUIRK_V4_3_2		BIT(6)
 
 struct dsi_pll_config {
 	bool enable_ssc;
@@ -968,6 +971,7 @@ static int dsi_7nm_phy_enable(struct msm_dsi_phy *phy,
 	u32 glbl_str_swi_cal_sel_ctrl, glbl_hstx_str_ctrl_0;
 	u32 glbl_rescode_top_ctrl, glbl_rescode_bot_ctrl;
 	u32 data;
+	u32 dphy_tuning[3];
 
 	DBG("");
 
@@ -1082,6 +1086,29 @@ static int dsi_7nm_phy_enable(struct msm_dsi_phy *phy,
 		}
 		glbl_rescode_top_ctrl = 0x03;
 		glbl_rescode_bot_ctrl = 0x3c;
+	}
+
+	/* v4.3.2 changes the regulator setup without changing the v4.3 PLL. */
+	if (phy->cfg->quirks & DSI_PHY_7NM_QUIRK_V4_3_2) {
+		vreg_ctrl_0 = phy->cphy_mode ? 0x45 : 0x44;
+		vreg_ctrl_1 = phy->cphy_mode ? 0x41 : 0x19;
+	}
+
+	if (of_property_present(phy->pdev->dev.of_node, "qcom,dphy-tuning")) {
+		if (phy->cphy_mode || !(phy->cfg->quirks & DSI_PHY_7NM_QUIRK_V4_3_2))
+			return -EINVAL;
+
+		ret = of_property_read_u32_array(phy->pdev->dev.of_node,
+						"qcom,dphy-tuning", dphy_tuning, 3);
+		if (ret)
+			return ret;
+		if (dphy_tuning[0] > 0xff || dphy_tuning[1] > 0xff ||
+		    dphy_tuning[2] > 0xff)
+			return -EINVAL;
+
+		vreg_ctrl_0 = dphy_tuning[0];
+		glbl_hstx_str_ctrl_0 = dphy_tuning[1];
+		glbl_str_swi_cal_sel_ctrl = dphy_tuning[2];
 	}
 
 	/* de-assert digital and pll power down */
@@ -1388,6 +1415,29 @@ const struct msm_dsi_phy_cfg dsi_phy_5nm_8450_cfgs = {
 	.io_start = { 0xae94400, 0xae96400 },
 	.num_dsi_phy = 2,
 	.quirks = DSI_PHY_7NM_QUIRK_V4_3,
+};
+
+const struct msm_dsi_phy_cfg dsi_phy_5nm_7475_cfgs = {
+	.has_phy_lane = true,
+	.regulator_data = dsi_phy_7nm_97800uA_regulators,
+	.num_regulators = ARRAY_SIZE(dsi_phy_7nm_97800uA_regulators),
+	.ops = {
+		.enable = dsi_7nm_phy_enable,
+		.disable = dsi_7nm_phy_disable,
+		.pll_init = dsi_pll_7nm_init,
+		.save_pll_state = dsi_7nm_pll_save_state,
+		.restore_pll_state = dsi_7nm_pll_restore_state,
+		.set_continuous_clock = dsi_7nm_set_continuous_clock,
+	},
+	.min_pll_rate = 600000000UL,
+#ifdef CONFIG_64BIT
+	.max_pll_rate = 5000000000UL,
+#else
+	.max_pll_rate = ULONG_MAX,
+#endif
+	.io_start = { 0xae94400, 0xae96400 },
+	.num_dsi_phy = 2,
+	.quirks = DSI_PHY_7NM_QUIRK_V4_3 | DSI_PHY_7NM_QUIRK_V4_3_2,
 };
 
 const struct msm_dsi_phy_cfg dsi_phy_5nm_8775p_cfgs = {

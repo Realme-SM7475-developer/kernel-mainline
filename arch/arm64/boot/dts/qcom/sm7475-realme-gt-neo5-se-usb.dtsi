@@ -127,6 +127,8 @@
 	usb_dwc3: usb@a600000 {
 		compatible = "qcom,sm8450-dwc3", "qcom,snps-dwc3";
 		reg = <0x0a600000 0x100000>;
+		iommus = <&mainline_apps_smmu 0x0 0x0>;
+		dma-coherent;
 
 		clocks = <&gcc GCC_CFG_NOC_USB3_PRIM_AXI_CLK>,
 			 <&gcc GCC_USB30_PRIM_MASTER_CLK>,

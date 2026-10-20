@@ -34,7 +34,6 @@ static const struct regulator_bulk_data tianma_nt37705_supplies[] = {
 	{ .supply = "vddio" },
 	{ .supply = "extvdd" },
 	{ .supply = "vci" },
-	{ .supply = "avdd" },
 };
 
 static inline
@@ -51,6 +50,29 @@ static void tianma_nt37705_reset(struct tianma_nt37705 *ctx)
 	usleep_range(2000, 3000);
 	gpiod_set_value_cansleep(ctx->reset_gpio, 0);
 	msleep(20);
+}
+
+static int tianma_nt37705_enable_supplies(struct tianma_nt37705 *ctx)
+{
+	int i, ret;
+
+	/* The Senna supply table orders vddio, extvdd, vci and waits 1 ms
+	 * after each rail. Bulk enable can enable rails in parallel.
+	 */
+	for (i = 0; i < ARRAY_SIZE(tianma_nt37705_supplies); i++) {
+		ret = regulator_enable(ctx->supplies[i].consumer);
+		if (ret) {
+			dev_err(&ctx->dsi->dev, "Failed to enable %s: %d\n",
+				ctx->supplies[i].supply, ret);
+			while (i--)
+				regulator_disable(ctx->supplies[i].consumer);
+			return ret;
+		}
+
+		usleep_range(1000, 2000);
+	}
+
+	return 0;
 }
 
 static int tianma_nt37705_on(struct tianma_nt37705 *ctx)
@@ -99,7 +121,7 @@ static int tianma_nt37705_on(struct tianma_nt37705 *ctx)
 	/* Fre 144Hz */
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x2f, 0x02);
 	/* TE ON */
-	mipi_dsi_dcs_set_tear_on_multi(&dsi_ctx, MIPI_DSI_DCS_TEAR_MODE_VBLANK);
+	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, MIPI_DCS_SET_TEAR_ON, 0x00);
 	mipi_dsi_dcs_set_tear_scanline_multi(&dsi_ctx, 0x0000);
 	/* Nor 51 */
 	mipi_dsi_dcs_set_display_brightness_multi(&dsi_ctx, 0x0000);
@@ -173,14 +195,14 @@ static int tianma_nt37705_on(struct tianma_nt37705 *ctx)
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6f, 0x0a);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xe4,
 				     0x80, 0x00, 0x00, 0x10, 0x00, 0x53);
-	/* AOD off splash */    
+	/* AOD off splash */
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0,
 				     0x55, 0xaa, 0x52, 0x08, 0x01);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x6f, 0x0e);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xd2,
 				     0x02, 0x00, 0x10, 0x05, 0x82);
 	/* 11H sleep out */
-	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0x11, 0x00);
+	mipi_dsi_dcs_exit_sleep_mode_multi(&dsi_ctx);
 	mipi_dsi_msleep(&dsi_ctx, 128);
 	mipi_dsi_dcs_write_seq_multi(&dsi_ctx, 0xf0,
 				     0x55, 0xaa, 0x52, 0x08, 0x00);
@@ -219,45 +241,55 @@ static int tianma_nt37705_prepare(struct drm_panel *panel)
 	struct tianma_nt37705 *ctx = to_tianma_nt37705(panel);
 	struct device *dev = &ctx->dsi->dev;
 	struct drm_dsc_picture_parameter_set pps;
+	u8 power_mode = 0;
+	u8 id[3] = { 0 };
 	int ret;
 
-	ret = regulator_bulk_enable(ARRAY_SIZE(tianma_nt37705_supplies),
-				    ctx->supplies);
+	ret = tianma_nt37705_enable_supplies(ctx);
 	if (ret < 0)
 		return ret;
 
 	tianma_nt37705_reset(ctx);
+	ctx->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
+	ret = mipi_dsi_dcs_read(ctx->dsi, MIPI_DCS_GET_DISPLAY_ID, id, sizeof(id));
+	dev_info(dev, "Panel ID after reset: ret=%d id=%*ph\n", ret, 3, id);
 
 	ret = tianma_nt37705_on(ctx);
 	if (ret < 0) {
 		dev_err(dev, "Failed to initialize panel: %d\n", ret);
-		gpiod_set_value_cansleep(ctx->reset_gpio, 1);
-		regulator_bulk_disable(ARRAY_SIZE(tianma_nt37705_supplies),
-				       ctx->supplies);
-		return ret;
+		goto err_disable_supplies;
 	}
+	ret = mipi_dsi_dcs_get_power_mode(ctx->dsi, &power_mode);
+	dev_info(dev, "Panel power mode before PPS: ret=%d value=%#02x\n",
+		 ret, power_mode);
 
 	drm_dsc_pps_payload_pack(&pps, &ctx->dsc);
+	dev_info(dev, "DSC PPS: %*phN\n", (int)sizeof(pps), &pps);
 
 	ret = mipi_dsi_picture_parameter_set(ctx->dsi, &pps);
 	if (ret < 0) {
 		dev_err(panel->dev, "failed to transmit PPS: %d\n", ret);
-		regulator_bulk_disable(ARRAY_SIZE(tianma_nt37705_supplies),
-				       ctx->supplies);
-		return ret;
+		goto err_disable_supplies;
 	}
 
 	ret = mipi_dsi_compression_mode(ctx->dsi, true);
 	if (ret < 0) {
 		dev_err(dev, "failed to enable compression mode: %d\n", ret);
-		regulator_bulk_disable(ARRAY_SIZE(tianma_nt37705_supplies),
-				       ctx->supplies);
-		return ret;
+		goto err_disable_supplies;
 	}
 
 	msleep(28);
+	ret = mipi_dsi_dcs_get_power_mode(ctx->dsi, &power_mode);
+	dev_info(dev, "Panel power mode after init: ret=%d value=%#02x\n",
+		 ret, power_mode);
 
 	return 0;
+
+err_disable_supplies:
+	gpiod_set_value_cansleep(ctx->reset_gpio, 1);
+	regulator_bulk_disable(ARRAY_SIZE(tianma_nt37705_supplies),
+			       ctx->supplies);
+	return ret;
 }
 
 static int tianma_nt37705_unprepare(struct drm_panel *panel)
@@ -293,7 +325,7 @@ static const struct drm_display_mode tianma_nt37705_mode = {
 };
 
 static int tianma_nt37705_get_modes(struct drm_panel *panel,
-							  struct drm_connector *connector)
+				  struct drm_connector *connector)
 {
 	return drm_connector_helper_get_modes_fixed(connector, &tianma_nt37705_mode);
 }
@@ -307,33 +339,31 @@ static const struct drm_panel_funcs tianma_nt37705_panel_funcs = {
 static int tianma_nt37705_bl_update_status(struct backlight_device *bl)
 {
 	struct mipi_dsi_device *dsi = bl_get_data(bl);
+	unsigned long mode_flags = dsi->mode_flags;
 	u16 brightness = backlight_get_brightness(bl);
 	int ret;
 
 	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
 
 	ret = mipi_dsi_dcs_set_display_brightness_large(dsi, brightness);
-	if (ret < 0)
-		return ret;
+	dsi->mode_flags = mode_flags;
 
-	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
-
-	return 0;
+	return ret;
 }
 
 static int tianma_nt37705_bl_get_brightness(struct backlight_device *bl)
 {
 	struct mipi_dsi_device *dsi = bl_get_data(bl);
+	unsigned long mode_flags = dsi->mode_flags;
 	u16 brightness;
 	int ret;
 
-	dsi->mode_flags &= ~MIPI_DSI_MODE_LPM;
+	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
 	ret = mipi_dsi_dcs_get_display_brightness_large(dsi, &brightness);
+	dsi->mode_flags = mode_flags;
 	if (ret < 0)
 		return ret;
-
-	dsi->mode_flags |= MIPI_DSI_MODE_LPM;
 
 	return brightness;
 }
@@ -404,7 +434,7 @@ static int tianma_nt37705_probe(struct mipi_dsi_device *dsi)
 	ctx->dsc.dsc_version_major = 1;
 	ctx->dsc.dsc_version_minor = 1;
 
-	/* TODO: Pass slice_per_pkt = 2 */
+	dsi->dsc_slice_per_pkt = 2;
 	ctx->dsc.slice_height = 12;
 	ctx->dsc.slice_width = 620;
 	/*
@@ -416,6 +446,16 @@ static int tianma_nt37705_probe(struct mipi_dsi_device *dsi)
 	ctx->dsc.bits_per_component = 10;
 	ctx->dsc.bits_per_pixel = 8 << 4; /* 4 fractional bits */
 	ctx->dsc.block_pred_enable = true;
+
+	/* DSC 1.1 SCR1 uses the same RGB RC ranges as DSC 1.2. */
+	drm_dsc_set_const_params(&ctx->dsc);
+	drm_dsc_set_rc_buf_thresh(&ctx->dsc);
+	ret = drm_dsc_setup_rc_params(&ctx->dsc, DRM_DSC_1_2_444);
+	if (ret) {
+		drm_panel_remove(&ctx->panel);
+		return ret;
+	}
+	ctx->dsc.first_line_bpg_offset = 15;
 
 	ret = devm_mipi_dsi_attach(dev, dsi);
 	if (ret < 0) {

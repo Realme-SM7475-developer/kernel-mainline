@@ -328,6 +328,8 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 		<bitfield name="EN" pos="0" type="boolean"/>
 	</reg32>
 	<reg32 offset="0x00168" name="TEST_PATTERN_GEN_CMD_MDP_INIT_VAL0"/>
+	<reg32 offset="0x00178" name="TEST_PATTERN_GEN_CMD_DMA_INIT_VAL"/>
+	<reg32 offset="0x001e8" name="TPG_DMA_FIFO_RESET"/>
 	<reg32 offset="0x00180" name="TEST_PATTERN_GEN_CMD_STREAM0_TRIGGER">
 		<bitfield name="SW_TRIGGER" pos="0" type="boolean"/>
 	</reg32>
