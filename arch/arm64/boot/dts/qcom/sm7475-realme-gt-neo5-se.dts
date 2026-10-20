@@ -160,6 +160,7 @@
 };
 
 &mainline_mdss_dsi0 {
+	/* The stock DSI host rail is PM8350C L10 at 1.2 V (vdda-1p2). */
 	vdda-supply = <&display_extvdd>;
 	pinctrl-0 = <&display_te_active>;
 	pinctrl-1 = <&display_te_sleep>;
@@ -167,7 +168,7 @@
 	status = "okay";
 
 	panel@0 {
-		compatible = "realme,gt-neo5-se-nt37705";
+		compatible = "tianma,nt37705";
 		reg = <0>;
 		/* Map the driver's logical 0-1-0 sequence to the stock H-L-H pulse. */
 		reset-gpios = <&tlmm 3 GPIO_ACTIVE_LOW>;

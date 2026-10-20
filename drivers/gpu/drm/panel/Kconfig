@@ -8,15 +8,14 @@ config DRM_PANEL
 menu "Display Panels"
 	depends on DRM && DRM_PANEL
 
-config DRM_PANEL_REALME_NT37705
-	tristate "Realme GT Neo5 SE NT37705 DSI panel"
+config DRM_PANEL_TIANMA_NT37705
+	tristate "Tianma NT37705 DSI panel"
 	depends on OF
 	depends on DRM_MIPI_DSI
 	depends on BACKLIGHT_CLASS_DEVICE
 	select DRM_DISPLAY_DSC_HELPER
 	help
-	  Say Y here to enable the NT37705 DSC command-mode panel used by
-	  the Realme GT Neo5 SE.
+	  Say Y here to enable the Tianma NT37705 DSC command-mode panel.
 
 config DRM_PANEL_ABT_Y030XX067A
 	tristate "ABT Y030XX067A 320x480 LCD panel"
