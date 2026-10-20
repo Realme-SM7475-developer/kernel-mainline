@@ -177,12 +177,50 @@ IOMMU_CACHE still fails in both DMA cases; its FIFO control succeeds.
 Temporarily matching stock's stream shareability and context bypass
 attributes also does not restore DMA. These changes were reverted.
 
+Disabling the standard compression mode before replaying native 0x90/0x91
+also leaves grey black levels and distorted text. FIFO reads confirm that
+standard compression was disabled during this comparison. It was enabled
+again afterwards and the temporary module was removed.
+
 Stock disables /dev/mem. A broad seq_printf argument probe preceded an
 unexpected stock reboot without a retained pstore record; do not repeat
 that probe. Subsequent probes limited to SMMU structure fields and DSI
 kickoff completed and were removed, with encoder idle-collapse settings
 restored. Existing IOMMU tracepoints alone did not capture a new display
 mapping during the sampled interval.
+
+Optional bootloader panel handoff diagnostic
+============================================
+
+The default driver still resets and fully initializes the panel. A separate
+``sm7475-handoff.config`` fragment adds the read-only boot parameter
+``panel_tianma_nt37705.bootloader_handoff=1``. It requests reset with
+GPIOD_ASIS so probe does not discard the bootloader's state before prepare.
+Only the first prepare can preserve that state, after enabling the rails
+and checking deasserted output reset, panel ID, awake power mode and the
+complete expected ten-bit native 0x90/0x91 configuration. Failed checks
+select the existing full initialization. Subsequent power cycles also use
+full initialization.
+
+The successful handoff branch skips panel reset, initialization and the
+standard compression-mode write. Mainline still programs its DPU, DSC,
+DSI host and PHY, and backlight updates remain active. The bootloader's
+0x2f refresh setting is logged and preserved; the host mode remains the
+current 144 Hz mode. This is an initialization isolation experiment, not
+a complete reproduction of the bootloader pipeline or a verified fix.
+Check the handoff log before interpreting a visual result: a fallback
+boot provides no evidence about preserving the bootloader panel state.
+
+Build this diagnostic with::
+
+  EXTRA_FRAGMENT_REL=arch/arm64/configs/sm7475-handoff.config \
+    bash tools/build-sm7475.sh all
+
+Building without the extra fragment selects the original initialization.
+Retain the matching known ten-bit images before replacing build output.
+The 2026-10-21 diagnostic build passes compilation, checkpatch, AVB and
+payload hashes, including final kernel/config and USB shell checks. It
+has not yet been flashed or visually validated.
 
 Build and recovery
 ==================

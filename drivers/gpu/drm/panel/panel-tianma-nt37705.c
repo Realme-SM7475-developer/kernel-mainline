@@ -11,6 +11,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/regulator/consumer.h>
+#include <linux/string.h>
 
 #include <video/mipi_display.h>
 
@@ -21,12 +22,19 @@
 #include <drm/drm_panel.h>
 #include <drm/drm_probe_helper.h>
 
+/* Bring-up only: distinguish panel initialization from the pixel pipeline. */
+static bool bootloader_handoff;
+module_param(bootloader_handoff, bool, 0400);
+MODULE_PARM_DESC(bootloader_handoff,
+		 "Try to preserve the bootloader's ten-bit Senna panel state once");
+
 struct tianma_nt37705 {
 	struct drm_panel panel;
 	struct mipi_dsi_device *dsi;
 	struct drm_dsc_config dsc;
 	struct gpio_desc *reset_gpio;
 	struct regulator_bulk_data *supplies;
+	bool handoff_pending;
 };
 
 static const struct regulator_bulk_data tianma_nt37705_supplies[] = {
@@ -236,6 +244,55 @@ static int tianma_nt37705_off(struct tianma_nt37705 *ctx)
 	return dsi_ctx.accum_err;
 }
 
+static bool tianma_nt37705_try_handoff(struct tianma_nt37705 *ctx)
+{
+	static const u8 expected_id[] = { 0x77, 0x05, 0x01 };
+	static const u8 expected_native[] = {
+		0xab, 0x28, 0x00, 0x0c, 0xf2, 0x00, 0x02, 0x85, 0x01,
+		0x0f, 0x00, 0x08, 0x0a, 0xe9, 0x07, 0x5f, 0x10, 0xf0,
+	};
+	struct device *dev = &ctx->dsi->dev;
+	u8 native[sizeof(expected_native)] = { 0 };
+	u8 compression[2] = { 0 };
+	u8 id[sizeof(expected_id)] = { 0 };
+	u8 power = 0, rate = 0;
+	const char *stage = "reset";
+	int ret = -EINVAL;
+
+	/* Probe must not assert reset before these reads. */
+	if (gpiod_get_direction(ctx->reset_gpio) != 0 ||
+	    gpiod_get_value_cansleep(ctx->reset_gpio) != 0)
+		goto fallback;
+
+	stage = "ID";
+	ret = mipi_dsi_dcs_read(ctx->dsi, MIPI_DCS_GET_DISPLAY_ID, id, sizeof(id));
+	if (ret != sizeof(id) || memcmp(id, expected_id, sizeof(id)))
+		goto fallback;
+	stage = "power";
+	ret = mipi_dsi_dcs_get_power_mode(ctx->dsi, &power);
+	if (ret < 0 || power != 0x9c)
+		goto fallback;
+	stage = "native90";
+	ret = mipi_dsi_dcs_read(ctx->dsi, 0x90, compression, sizeof(compression));
+	if (ret != sizeof(compression) || compression[0] != 3 || compression[1] != 3)
+		goto fallback;
+	stage = "native91";
+	ret = mipi_dsi_dcs_read(ctx->dsi, 0x91, native, sizeof(native));
+	if (ret != sizeof(native) || memcmp(native, expected_native, sizeof(native)))
+		goto fallback;
+
+	ret = mipi_dsi_dcs_read(ctx->dsi, 0x2f, &rate, sizeof(rate));
+	dev_info(dev, "Preserving bootloader panel: ID=%*ph power=%02x native=%*ph rate=%02x (ret=%d)\n",
+		 (int)sizeof(id), id, power, (int)sizeof(native), native, rate, ret);
+	return true;
+
+fallback:
+	dev_warn(dev, "Bootloader handoff failed at %s: ret=%d ID=%*ph power=%02x native90=%*ph native91=%*ph; using full initialization\n",
+		 stage, ret, (int)sizeof(id), id, power,
+		 (int)sizeof(compression), compression, (int)sizeof(native), native);
+	return false;
+}
+
 static int tianma_nt37705_prepare(struct drm_panel *panel)
 {
 	struct tianma_nt37705 *ctx = to_tianma_nt37705(panel);
@@ -248,8 +305,19 @@ static int tianma_nt37705_prepare(struct drm_panel *panel)
 	if (ret < 0)
 		return ret;
 
-	tianma_nt37705_reset(ctx);
 	ctx->dsi->mode_flags |= MIPI_DSI_MODE_LPM;
+	if (ctx->handoff_pending) {
+		/* A later prepare follows our power-down and needs full init. */
+		ctx->handoff_pending = false;
+		if (tianma_nt37705_try_handoff(ctx))
+			return 0;
+
+		ret = gpiod_direction_output(ctx->reset_gpio, 1);
+		if (ret)
+			goto err_disable_supplies;
+	}
+
+	tianma_nt37705_reset(ctx);
 	ret = mipi_dsi_dcs_read(ctx->dsi, MIPI_DCS_GET_DISPLAY_ID, id, sizeof(id));
 	dev_info(dev, "Panel ID after reset: ret=%d id=%*ph\n", ret, 3, id);
 
@@ -382,6 +450,7 @@ tianma_nt37705_create_backlight(struct mipi_dsi_device *dsi)
 static int tianma_nt37705_probe(struct mipi_dsi_device *dsi)
 {
 	struct device *dev = &dsi->dev;
+	enum gpiod_flags reset_flags = bootloader_handoff ? GPIOD_ASIS : GPIOD_OUT_HIGH;
 	struct tianma_nt37705 *ctx;
 	int ret;
 
@@ -396,7 +465,8 @@ static int tianma_nt37705_probe(struct mipi_dsi_device *dsi)
 	if (ret < 0)
 		return dev_err_probe(dev, ret, "Failed to get regulators\n");
 
-	ctx->reset_gpio = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
+	ctx->handoff_pending = bootloader_handoff;
+	ctx->reset_gpio = devm_gpiod_get(dev, "reset", reset_flags);
 	if (IS_ERR(ctx->reset_gpio))
 		return dev_err_probe(dev, PTR_ERR(ctx->reset_gpio),
 				     "Failed to get reset-gpios\n");
