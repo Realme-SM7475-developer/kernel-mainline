@@ -240,7 +240,6 @@ static int tianma_nt37705_prepare(struct drm_panel *panel)
 {
 	struct tianma_nt37705 *ctx = to_tianma_nt37705(panel);
 	struct device *dev = &ctx->dsi->dev;
-	struct drm_dsc_picture_parameter_set pps;
 	u8 power_mode = 0;
 	u8 id[3] = { 0 };
 	int ret;
@@ -260,17 +259,10 @@ static int tianma_nt37705_prepare(struct drm_panel *panel)
 		goto err_disable_supplies;
 	}
 	ret = mipi_dsi_dcs_get_power_mode(ctx->dsi, &power_mode);
-	dev_info(dev, "Panel power mode before PPS: ret=%d value=%#02x\n",
+	dev_info(dev, "Panel power mode after panel init: ret=%d value=%#02x\n",
 		 ret, power_mode);
 
-	drm_dsc_pps_payload_pack(&pps, &ctx->dsc);
-	dev_info(dev, "DSC PPS: %*phN\n", (int)sizeof(pps), &pps);
-
-	ret = mipi_dsi_picture_parameter_set(ctx->dsi, &pps);
-	if (ret < 0) {
-		dev_err(panel->dev, "failed to transmit PPS: %d\n", ret);
-		goto err_disable_supplies;
-	}
+	/* The native 0x90/0x91 commands above configure the Senna DSC decoder. */
 
 	ret = mipi_dsi_compression_mode(ctx->dsi, true);
 	if (ret < 0) {

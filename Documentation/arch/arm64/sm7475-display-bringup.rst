@@ -22,6 +22,13 @@ buffer and multiplexing budget. This programs three initial lines on
 this panel instead of the legacy DSC 1.1 estimate of two. Device reads
 confirm the new value, but raised black levels and text artifacts remain.
 
+With stock Android's command encoder idle power collapse temporarily
+disabled, both DCE0 encoder register banks, their control blocks and
+the shared configuration match mainline. Stock's enabled PCC matrices
+are identity matrices. These measurements do not explain the remaining
+artifacts. Capture registers with the display awake: idle power collapse
+otherwise exposes reset values. Restore the debug settings afterwards.
+
 Hardware configuration
 ======================
 
@@ -51,7 +58,12 @@ With the panel already initialized, switching the runtime parameter
 ``/sys/module/msm/parameters/dsi_cmd_fifo`` to N makes DMA reads return
 zero readback count/data. Switching back to Y restores valid reads.
 The board command line currently enables the FIFO workaround. It is
-limited to controller 0, DSI v2.6 and packets of at most 256 bytes.
+limited to controller 0, DSI v2.6 and packets of at most 64 bytes,
+including the command header and padding. The native panel 0x90/0x91
+commands configure its DSC decoder; do not send a 128-byte PPS through
+the 64-byte command FIFO.
+Removing the oversized PPS transfer preserves panel ID and power-mode
+readback but does not fix raised black or text artifacts.
 The root cause of command DMA failure remains unresolved.
 
 Build and recovery

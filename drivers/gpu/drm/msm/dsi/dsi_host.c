@@ -34,6 +34,7 @@
 #include "phy/dsi_phy.h"
 
 #define DSI_RESET_TOGGLE_DELAY_MS 20
+#define DSI_CMD_FIFO_SIZE 64
 
 /* Bring-up diagnostic: compare the command FIFO with memory-backed DMA. */
 static bool dsi_cmd_fifo;
@@ -1404,7 +1405,7 @@ static int dsi_cmd_dma_tx(struct msm_dsi_host *msm_host, int len)
 	bool fifo = dsi_cmd_fifo &&
 		cfg_hnd->major == MSM_DSI_VER_MAJOR_6G &&
 		cfg_hnd->minor == MSM_DSI_6G_VER_MINOR_V2_6_0 &&
-		msm_host->id == 0 && len <= 256;
+		msm_host->id == 0 && len <= DSI_CMD_FIFO_SIZE;
 	u32 *data;
 	int i;
 
