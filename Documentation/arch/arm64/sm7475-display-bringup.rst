@@ -66,6 +66,39 @@ Removing the oversized PPS transfer preserves panel ID and power-mode
 readback but does not fix raised black or text artifacts.
 The root cause of command DMA failure remains unresolved.
 
+Further hardware isolation, 2026-10-20
+-------------------------------------
+
+Pinning the command GEM at stock's IOVA 0xfff2d000 does not restore DMA
+readback or improve the display. Privileged SMMU reads show SMR[4] =
+0x84022800 and S2CR[4] = 3. Hardware translation resolves that IOVA, and
+a write-combined mapping of the resulting RAM page contains the expected
+embedded DCS command header. A separately mapped page below 4 GB, with
+explicit cache cleaning, also produces no readback. Zero padding to eight
+bytes and batching maximum-return-size with the read command do not help.
+
+A controlled read from an intentionally unmapped IOVA reports SID 0x2802
+and context bank 3. DSI command DMA therefore reaches the expected SMMU
+context. This deliberately injected fault must not be confused with a
+spontaneous display failure. The temporary diagnostic mapping and module
+were removed after the test.
+
+The bootloader replaces the root compatible with qcom,ukee-mtp,
+qcom,ukee and qcom,mtp. Board diagnostics gated only on
+realme,gt-neo5-se will not execute. The MDSS node retains its compatible.
+
+Stock SDE debug offsets use physical base 0xae00000, whereas mainline's
+DPU catalog offsets use MDP base 0xae01000. Account for this difference
+when comparing subblocks: stock INTF1 offset 0x36000 is physical
+0xae36000. DSC, wide-bus and interface mux configuration match stock.
+
+An eight-bit DSC experiment changed both encoder and native decoder
+parameters, preserving resolution, slice geometry and rate. It caused
+full-screen coloured noise on this Senna panel. The experiment was
+rejected, its source changes reverted, and the known ten-bit image
+selected for recovery. Reports about another NT37705 panel are not
+evidence that this panel supports the same eight-bit configuration.
+
 Build and recovery
 ==================
 
