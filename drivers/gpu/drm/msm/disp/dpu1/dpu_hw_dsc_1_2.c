@@ -68,6 +68,35 @@ static int _dsc_calc_output_buf_max_addr(struct dpu_hw_dsc *hw_dsc, int num_soft
 	return max_addr - 1;
 };
 
+static u32 dpu_dsc_1_2_initial_lines(const struct drm_dsc_config *dsc,
+				   u32 num_slices, u32 mode)
+{
+	u32 bpp = dsc->bits_per_pixel >> 4;
+	u32 mux_word_size = dsc->bits_per_component >= 12 ? 64 : 48;
+	u32 slice_width = dsc->slice_width;
+	u32 input_latency, output_latency, extra_bits;
+	u32 output_width, chunk_bits;
+
+	/* Hardent DSC 1.2: 28 pipeline cycles and a 10-bit, 48-bit mux. */
+	input_latency = 28 + 3 * (44 + 48 - 1 + 2) * num_slices;
+	output_width = dsc->native_420 || dsc->native_422 ? 128 : 64;
+	if (dsc->native_422) {
+		bpp *= 2;
+		slice_width /= 2;
+	}
+	output_latency = DIV_ROUND_UP(9 * output_width + mux_word_size, bpp) + 1;
+	chunk_bits = 8 * dsc->slice_chunk_size;
+	if (((mode & DSC_MODE_SPLIT_PANEL) && (mode & DSC_MODE_MULTIPLEX)) ||
+	    (num_slices > 1 && output_width > bpp))
+		extra_bits = chunk_bits;
+	else
+		extra_bits = (output_width - bpp) * chunk_bits / output_width;
+
+	return DIV_ROUND_UP(dsc->initial_xmit_delay + input_latency +
+			    output_latency + DIV_ROUND_UP(extra_bits, bpp),
+			    slice_width);
+}
+
 static void dpu_hw_dsc_disable_1_2(struct dpu_hw_dsc *hw_dsc)
 {
 	struct dpu_hw_blk_reg_map *hw;
@@ -117,6 +146,8 @@ static void dpu_hw_dsc_config_1_2(struct dpu_hw_dsc *hw_dsc,
 
 	DPU_REG_WRITE(hw, DSC_CMN_MAIN_CNF, data);
 
+	/* The DSC 1.1 latency estimate omits the 1.2 output-buffer budget. */
+	initial_lines = dpu_dsc_1_2_initial_lines(dsc, num_active_slice_per_enc, mode);
 	data = (initial_lines & 0xff);
 
 	if (mode & DSC_MODE_VIDEO)

@@ -17,6 +17,11 @@ and grouping two slices per DSI packet removes the large vertical stripe
 artifacts, but black is still raised to grey and text edges are distorted.
 This is a bring-up checkpoint, not a claim of correct display output.
 
+The DSC 1.2 latency calculation also includes the input pipeline, output
+buffer and multiplexing budget. This programs three initial lines on
+this panel instead of the legacy DSC 1.1 estimate of two. Device reads
+confirm the new value, but raised black levels and text artifacts remain.
+
 Hardware configuration
 ======================
 
