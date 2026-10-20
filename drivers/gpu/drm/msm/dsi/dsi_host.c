@@ -1623,7 +1623,21 @@ static void dsi_fifo_status(struct msm_dsi_host *msm_host)
 
 	status = dsi_read(msm_host, REG_DSI_FIFO_STATUS);
 
-	/* fifo underflow, overflow */
+	/* Empty, full and watermark bits are not FIFO errors. */
+	status &= DSI_FIFO_STATUS_VIDEO_MDP_FIFO_OVERFLOW |
+		  DSI_FIFO_STATUS_VIDEO_MDP_FIFO_UNDERFLOW |
+		  DSI_FIFO_STATUS_CMD_MDP_FIFO_UNDERFLOW |
+		  DSI_FIFO_STATUS_CMD_DMA_FIFO_UNDERFLOW |
+		  DSI_FIFO_STATUS_DLN0_LP_FIFO_OVERFLOW |
+		  DSI_FIFO_STATUS_DLN0_HS_FIFO_OVERFLOW |
+		  DSI_FIFO_STATUS_DLN0_HS_FIFO_UNDERFLOW |
+		  DSI_FIFO_STATUS_DLN1_HS_FIFO_OVERFLOW |
+		  DSI_FIFO_STATUS_DLN1_HS_FIFO_UNDERFLOW |
+		  DSI_FIFO_STATUS_DLN2_HS_FIFO_OVERFLOW |
+		  DSI_FIFO_STATUS_DLN2_HS_FIFO_UNDERFLOW |
+		  DSI_FIFO_STATUS_DLN3_HS_FIFO_OVERFLOW |
+		  DSI_FIFO_STATUS_DLN3_HS_FIFO_UNDERFLOW;
+
 	if (status) {
 		dsi_write(msm_host, REG_DSI_FIFO_STATUS, status);
 		msm_host->err_work_state |= DSI_ERR_STATE_FIFO;

@@ -122,6 +122,34 @@ Some suppliers still report sync_state pending on legacy camera nodes.
 Their aggregate bandwidth can retain initial constraints; distinguish
 the individual display requests from these aggregate values.
 
+Command transport isolation
+===========================
+
+A controlled runtime test sends the same embedded DCS brightness packet
+from a temporary, cache-cleaned RAM page and from the internal FIFO.
+Memory DMA reports completion but FIFO readback remains 8192; the FIFO
+transmission changes readback to 4096. Each pass restores brightness to
+2048 through the working FIFO path. An additional non-embedded DMA
+brightness test also fails; this small-packet test alone does not establish
+that every non-embedded transfer is broken.
+
+With DSI interrupt enables temporarily masked, latched registers after
+memory DMA show completion, FIFO_STATUS=0x11111010, ACK_ERR_STATUS=0,
+TIMEOUT_STATUS=0 and no defined PHY error bits. FIFO_STATUS includes normal
+empty indicators, so a nonzero register is not sufficient to report a
+FIFO error. Filter overflow and underflow bits before setting the software
+FIFO error flag. The old ``dsi_err_worker: status=4`` message is not proof
+of a hardware underflow.
+
+The physical GCC HF and SF AXI clock gates both read 0x111, with CLK_OFF
+clear. Temporarily forcing the vendor DSI dynamic-clock mask does not
+restore memory DMA. The display SMMU context already has ACTLR=1, matching
+the stock SID table; rewriting it and flushing the IOTLB does not help.
+Temporary mappings, interrupt masks, clock settings and modules are
+restored or removed after these probes. These results narrow the command
+transport investigation but do not identify the cause of raised black
+levels or text distortion.
+
 Build and recovery
 ==================
 
