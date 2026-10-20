@@ -150,6 +150,40 @@ restored or removed after these probes. These results narrow the command
 transport investigation but do not identify the cause of raised black
 levels or text distortion.
 
+Stock DMA and decoder comparison
+===============================
+
+Scoped probes at stock's DSI command kickoff function capture an actual
+128-byte PPS transmission. Both halves of the generated mainline PPS now
+match that stock payload byte for byte. Reading native panel registers
+also returns the same 0x90 data (03 03) and complete 18-byte 0x91 data on
+both kernels. This verifies configuration values, not successful delivery
+of a standard PPS over mainline's failing memory DMA path. Stock's standard
+READ_PPS_START command returns an all-zero buffer and is not a reliable
+way to establish decoder PPS state on this panel.
+
+Stock's display stream uses SMR[4]=0x84022800 and S2CR[4]=0x304, selecting
+context bank 4. Mainline uses the same stream match with context bank 3;
+context indices are allocation results and must not simply be copied.
+Stock's context has ACTLR=1, TCR=0x80351c and MAIR0=0xf404ff44.
+
+In the captured stock boot, walking the three-level command mapping
+resolves IOVA 0xfff2d000 to physical page 0xa7512000. At command kickoff,
+both the driver's vmap and
+the physical page's linear mapping contain 0x00370001, 0xa006000a. This
+independently validates the walk. The leaf uses write-back caching and
+inner shareability. An isolated mainline-page comparison with and without
+IOMMU_CACHE still fails in both DMA cases; its FIFO control succeeds.
+Temporarily matching stock's stream shareability and context bypass
+attributes also does not restore DMA. These changes were reverted.
+
+Stock disables /dev/mem. A broad seq_printf argument probe preceded an
+unexpected stock reboot without a retained pstore record; do not repeat
+that probe. Subsequent probes limited to SMMU structure fields and DSI
+kickoff completed and were removed, with encoder idle-collapse settings
+restored. Existing IOMMU tracepoints alone did not capture a new display
+mapping during the sampled interval.
+
 Build and recovery
 ==================
 
