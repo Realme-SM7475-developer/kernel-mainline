@@ -219,8 +219,32 @@ Build this diagnostic with::
 Building without the extra fragment selects the original initialization.
 Retain the matching known ten-bit images before replacing build output.
 The 2026-10-21 diagnostic build passes compilation, checkpatch, AVB and
-payload hashes, including final kernel/config and USB shell checks. It
-has not yet been flashed or visually validated.
+payload hashes, including final kernel/config and USB shell checks. All
+three matching images were flashed and the USB shell returned. The boot
+log confirms the preserving branch, ID 77 05 01, power 0x9c and the exact
+native decoder bytes; the bootloader's 0x2f refresh value is 00. The user
+reports normal black levels but still distorted text with black lines.
+Preserving the bootloader panel state therefore improves the background,
+but does not fix the whole display. Initialization also sets refresh and
+other decoder state, so this comparison alone does not identify which
+omitted command causes the grey background.
+
+Even without mainline panel initialization,
+the backlight read through memory DMA still returns no data. Restoring
+FIFO mode returns the original readback of 8192. Thus the DMA limitation
+does not require executing the full mainline panel initialization.
+
+Framebuffer versus constant-colour comparison, 2026-10-21
+--------------------------------------------------------
+
+The user sees black horizontal lines through a framebuffer-rendered white
+rectangle. Full framebuffer readback matches every visible RGB pixel of
+the test pattern, and CTL-start/PP-done both increase for its write update.
+With SSPP0 constant colour enabled instead, full-screen white is normal
+without horizontal lines. INTF frame count confirms that transfer. This
+makes the framebuffer fetch/source-format path a priority for the next
+investigation; the precise cause is still unknown. The user requested a
+pause to shut down the computer, so further experiments stopped.
 
 Build and recovery
 ==================
