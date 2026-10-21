@@ -561,7 +561,47 @@ digits. The correct MMSS addresses 0x01756008/0x01756088 and GEM addresses
 The helper unloads normally. A corresponding stock 5.10.236 build uses
 the stock Clang r416183b, retains CFI and passes checks of all 19 import
 CRCs against the original ramdisk modules and the 1024-byte module layout.
-These are static compatibility checks; stock runtime validation is pending.
+The stock helper subsequently loads and unloads successfully on the actual
+5.10.236 kernel. With encoder idle power collapse disabled and the display
+awake, both stock TBUs have CTRL 0x94120000, STATUS 0x00100000 and zero debug
+VA/TRIGGER/PAR/AXUSER, matching a clean mainline capture. All four stock
+NoC QoS words also read 0x00020008. Wake request/ACK return to zero and the
+original debugfs selectors and idle setting are restored. No new Oops,
+external abort, CFI or module-version error is observed.
+
+The stock driver's VBIF debugfs captures the full 0x1040-byte range. All
+1040 words are compared against the bounded mainline snapshot. There are
+29 differences: OUT_AXI_ASHARED and 28 QoS-remap words between offsets
+0x550 and 0x5cc. All other captured words agree. A reversible mainline
+comparison installs and verifies the complete 32-word stock QoS tables,
+including unchanged entries, and clears OUT_AXI_ASHARED. Nine uniform
+brightness commands are checked before, during and after the replacement.
+All 27 retain the same bit-8-dependent failure; every transfer completes
+with STATUS 0, IRQ 1 and ACK 0. Original QoS tables and shared attributes
+are restored and temporary modules are unloaded. This does not support a
+repair consisting only of copying the captured VBIF configuration.
+
+Reset sequencing diagnostic
+--------------------------
+
+The normal MDSS initialization pulses reset before acquiring and enabling
+the MDSS clocks. The rejected no-reset test must not be repeated unchanged.
+An independent opt-in comparison, ``msm.mdss_reset_with_clocks=1``, retains
+the reset pulse but enables the four DT-listed MDSS clocks around it. The
+option defaults off and requires root compatible ``qcom,ukee`` and the
+``qcom,sm8450-mdss`` device compatible. ABL replaces the root compatibles
+with ``qcom,ukee-mtp``, ``qcom,ukee`` and ``qcom,mtp``, so checking for the
+source DTS's Realme string would silently skip this test. Clock
+acquisition/enable and reset errors abort initialization;
+clock references are released on exit. It logs the enabled clock count and
+the reset deassertion result/status. No panel, DSC, IOMMU or interconnect
+parameters are changed by this option.
+
+Use ``arch/arm64/configs/sm7475-clocked-reset.config`` as the additional
+configuration fragment. This is a diagnostic hypothesis about reset timing,
+not an established cause or a verified display repair. Preserve the matching
+boot/vendor_boot/dtbo rollback set before testing it. Evidence for the stock
+comparison and QoS controls is in ``out/display-evidence/stock-llcc-20261021``.
 
 Build and recovery
 ==================

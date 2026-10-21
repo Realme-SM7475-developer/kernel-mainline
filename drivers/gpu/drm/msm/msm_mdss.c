@@ -7,6 +7,7 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/interconnect.h>
+#include <linux/moduleparam.h>
 #include <linux/irq.h>
 #include <linux/irqchip.h>
 #include <linux/irqdesc.h>
@@ -23,6 +24,12 @@
 #include <generated/mdss.xml.h>
 
 #define MIN_IB_BW	400000000UL /* Min ib vote 400MB */
+
+/* Opt-in bring-up comparison; the normal reset sequence stays unchanged. */
+static bool mdss_reset_with_clocks;
+module_param(mdss_reset_with_clocks, bool, 0400);
+MODULE_PARM_DESC(mdss_reset_with_clocks,
+		"Enable MDSS clocks around the reset on the SM7475 test board");
 
 struct msm_mdss_data {
 	u32 reg_bus_bw;
@@ -341,6 +348,9 @@ static void msm_mdss_destroy(struct msm_mdss *msm_mdss)
 static int msm_mdss_reset(struct device *dev)
 {
 	struct reset_control *reset;
+	struct clk_bulk_data *clocks = NULL;
+	int num_clocks = 0;
+	int ret;
 
 	reset = reset_control_get_optional_exclusive(dev, NULL);
 	if (!reset) {
@@ -351,17 +361,48 @@ static int msm_mdss_reset(struct device *dev)
 				     "failed to acquire mdss reset\n");
 	}
 
-	reset_control_assert(reset);
+	if (mdss_reset_with_clocks &&
+	    of_machine_is_compatible("qcom,ukee") &&
+	    of_device_is_compatible(dev->of_node, "qcom,sm8450-mdss")) {
+		num_clocks = clk_bulk_get_all(dev, &clocks);
+		if (num_clocks < 0) {
+			ret = num_clocks;
+			goto put_reset;
+		}
+		if (!num_clocks) {
+			ret = -ENODEV;
+			goto put_clocks;
+		}
+		ret = clk_bulk_prepare_enable(num_clocks, clocks);
+		if (ret)
+			goto put_clocks;
+		dev_info(dev, "diagnostic reset with %d MDSS clocks enabled\n",
+			 num_clocks);
+	}
+
+	ret = reset_control_assert(reset);
+	if (ret)
+		goto disable_clocks;
 	/*
 	 * Tests indicate that reset has to be held for some period of time,
 	 * make it one frame in a typical system
 	 */
 	msleep(20);
-	reset_control_deassert(reset);
+	ret = reset_control_deassert(reset);
+	if (num_clocks)
+		dev_info(dev, "diagnostic reset deassert ret=%d status=%d\n",
+			 ret, reset_control_status(reset));
 
+disable_clocks:
+	if (num_clocks)
+		clk_bulk_disable_unprepare(num_clocks, clocks);
+put_clocks:
+	if (num_clocks > 0)
+		clk_bulk_put_all(num_clocks, clocks);
+put_reset:
 	reset_control_put(reset);
 
-	return 0;
+	return ret;
 }
 
 /*
