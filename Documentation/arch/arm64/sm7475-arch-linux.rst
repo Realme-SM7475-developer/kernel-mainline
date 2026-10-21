@@ -544,3 +544,23 @@ manually while collecting logs. The image, payload, unchanged bootstrap
 and module hashes are recorded in
 ``archlinuxarm/touch/module-image-validation.json``. After flashing,
 set slot a active and verify its retry/unbootable state before reboot.
+
+The module-only kernel booted with working USB, SSH, SDDM and battery
+telemetry. GPIO97 no longer failed registration. After an unexpected
+restart, separate temporary probe stages verified module registration,
+GPIO/supply acquisition, spi_setup, and the complete power/reset sequence.
+The first nine-byte SPI read then failed to return and the phone
+restarted. The user reported no manual reset or cable operation. The
+temporary GENI driver reported SPI protocol 1, FIFO disabled, a 16-entry
+32-bit FIFO, and GPI DMA operation. Diagnostic modules were not installed
+for auto-loading, and the original GENI driver was restored afterward.
+
+The stock QUP0 wrapper declares SMMU stream 0x5a3; GPI0 separately declares
+0x5b6. These also match the upstream SM8450 tree used by marble. GENI SPI
+maps message buffers through its wrapper device, whose iommus property
+was missing here. Add the wrapper's 0x5a3 mapping without changing the
+GPI ring mapping. The next diagnostic images, ``out-touch-smmu-20261021``,
+have the same kernel and module bytes as the module-only build and a DTB
+with the wrapper mapping. AVB and payload checks passed; hardware
+validation of the mapping and touch events remains pending. Keep using
+the normal battery/desktop images for recovery.
