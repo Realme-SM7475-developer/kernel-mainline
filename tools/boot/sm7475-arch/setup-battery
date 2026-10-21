@@ -86,5 +86,12 @@ WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
 systemctl enable sm7475-adsp.service
+# This board has no gauge interrupt. Keep charging-state changes visible
+# without waiting for the driver's six-minute default polling interval.
+install -d /etc/tmpfiles.d
+cat > /etc/tmpfiles.d/sm7475-battery.conf <<'EOF'
+w /sys/module/bq27xxx_battery/parameters/poll_interval - - - - 15
+EOF
+systemd-tmpfiles --create /etc/tmpfiles.d/sm7475-battery.conf
 echo 'Installed stock ADSP firmware and enabled its post-root startup service.'
 echo 'Start sm7475-adsp.service after booting the matching kernel and DTB.'

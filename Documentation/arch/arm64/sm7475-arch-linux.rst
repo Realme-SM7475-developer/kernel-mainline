@@ -418,6 +418,13 @@ unexpected states instead of forcing a restart. Notification requests
 use the battery manager request mutex, and supply-change events after
 startup refresh earlier ``-EAGAIN`` reads.
 
+The setup also installs ``/etc/tmpfiles.d/sm7475-battery.conf`` to set
+``/sys/module/bq27xxx_battery/parameters/poll_interval`` to 15 seconds.
+The gauge has no interrupt on this board, and its default active polling
+interval is 360 seconds. The shorter interval refreshes battery status
+without requiring diagnostic reads. It only changes telemetry polling;
+it does not program charging controls or gauge calibration.
+
 Hardware validation, 2026-10-21: the external gauge reported 54%, about
 7.71 V, 30.8-31.6 degrees C, 947 mAh remaining and 1778 mAh full capacity.
 UPower exposed one battery, sourced from BQ28Z610; the placeholder
@@ -443,3 +450,21 @@ programmed. Full charging, protection and thermal management still
 need separate validation. Before returning to the older kernel without
 ADSP support, disable ``sm7475-adsp.service`` to avoid a missing-device
 service failure; it does not block the existing desktop recovery path.
+
+A subsequent USB-A charger/A-C cable test, with the connection secured,
+detected VBUS up to 5.216 V. All 40 samples still reported discharging:
+neither instantaneous nor average battery current became positive, and
+UPower stayed in state 2. The initial test with a loose charger connection
+is inconclusive. Thus absence of a charging icon currently agrees with
+the gauge, rather than establishing a Plasma display bug. Stock boot
+logs and charger source additionally contain charge-enable, input-current
+and temperature-control operations that this telemetry setup does not
+implement. See ``archlinuxarm/charging/plug-test-tight.jsonl`` and
+``charging-status-audit.json``. USB online must not be converted into a
+synthetic battery Charging state.
+
+The 15-second polling configuration was verified live and after a
+controlled reboot. The new boot retained systemd running, zero failed
+units, the userdata root, SDDM, UPower, SSH and the ADSP startup service.
+The battery still truthfully reported discharging. This change fixes
+refresh latency; it does not claim to enable battery charging.
