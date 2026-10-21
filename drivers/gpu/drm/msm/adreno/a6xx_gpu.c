@@ -830,16 +830,17 @@ static void a7xx_patch_pwrup_reglist(struct msm_gpu *gpu)
 
 	lock->gpu_req = lock->cpu_req = lock->turn = 0;
 
+	/* A730 has no IFPC-only register list. */
+	lock->ifpc_list_len = 0;
 	reglist = adreno_gpu->info->a6xx->ifpc_reglist;
-	lock->ifpc_list_len = reglist->count;
+	if (reglist) {
+		lock->ifpc_list_len = reglist->count;
 
-	/*
-	 * For each entry in each of the lists, write the offset and the current
-	 * register value into the GPU buffer
-	 */
-	for (i = 0; i < reglist->count; i++) {
-		*dest++ = reglist->regs[i];
-		*dest++ = gpu_read(gpu, reglist->regs[i]);
+		/* Save each offset and its current register value. */
+		for (i = 0; i < reglist->count; i++) {
+			*dest++ = reglist->regs[i];
+			*dest++ = gpu_read(gpu, reglist->regs[i]);
+		}
 	}
 
 	reglist = adreno_gpu->info->a6xx->pwrup_reglist;
@@ -2061,7 +2062,9 @@ static void a6xx_llc_slices_init(struct platform_device *pdev,
 	a6xx_gpu->llc_slice = llcc_slice_getd(LLCC_GPU);
 	a6xx_gpu->htw_llc_slice = llcc_slice_getd(LLCC_GPUHTW);
 
-	if (IS_ERR_OR_NULL(a6xx_gpu->llc_slice) && IS_ERR_OR_NULL(a6xx_gpu->htw_llc_slice))
+	/* A7xx also uses CX_MISC for GMU boot, independently of LLCC. */
+	if (!is_a7xx && IS_ERR_OR_NULL(a6xx_gpu->llc_slice) &&
+	    IS_ERR_OR_NULL(a6xx_gpu->htw_llc_slice))
 		a6xx_gpu->llc_mmio = ERR_PTR(-EINVAL);
 }
 
@@ -2660,6 +2663,14 @@ struct msm_gpu *a6xx_gpu_init(struct drm_device *dev)
 		  config->info->family == ADRENO_7XX_GEN3;
 
 	a6xx_llc_slices_init(pdev, a6xx_gpu, is_a7xx);
+
+	if (is_a7xx && IS_ERR(a6xx_gpu->llc_mmio)) {
+		ret = PTR_ERR(a6xx_gpu->llc_mmio);
+		a6xx_llc_slices_destroy(a6xx_gpu);
+		of_node_put(node);
+		kfree(a6xx_gpu);
+		return ERR_PTR(ret);
+	}
 
 	ret = a6xx_set_supported_hw(&pdev->dev, config->info);
 	if (ret) {
