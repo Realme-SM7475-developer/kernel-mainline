@@ -10,9 +10,14 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 [[ -x /usr/local/libexec/sm7475-plasma-mobile-session ]] ||
     die 'Configure the software Plasma Mobile fallback first'
 command -v eglinfo >/dev/null || die 'Install mesa-utils first'
+# A corrected firmware file needs a fresh boot after a failed PAS attempt.
+# Rendering was corrupt after a failed authentication followed by a hot retry.
+if dmesg | grep 'adreno 3d00000.gpu: error .* initializing firmware' >/dev/null; then
+    die 'GPU firmware authentication failed this boot; install the signed stock ELF and reboot'
+fi
 # Opening GBM also exercises firmware loading and GPU hardware initialization.
 probe=$(timeout 30 env -u LIBGL_ALWAYS_SOFTWARE -u GALLIUM_DRIVER \
-    -u MESA_LOADER_DRIVER_OVERRIDE eglinfo -B -p gbm 2>&1) ||
+    -u MESA_LOADER_DRIVER_OVERRIDE -u FD_MESA_DEBUG -u IR3_SHADER_DEBUG eglinfo -B -p gbm 2>&1) ||
     die 'GBM/EGL probe failed; keep the software session and inspect dmesg'
 grep -Eq 'renderer:.*(FD725|Adreno.*725)' <<< "$probe" ||
     die 'EGL did not report the hardware A725 renderer'
@@ -22,9 +27,7 @@ cat > /usr/local/libexec/sm7475-plasma-mobile-gpu-session <<'EOF'
 case ${LANG:-C} in C|POSIX) export LANG=C.UTF-8 ;; esac
 unset LIBGL_ALWAYS_SOFTWARE GALLIUM_DRIVER MESA_LOADER_DRIVER_OVERRIDE
 unset XWAYLAND_NO_GLAMOR
-# A725 tiled allocations corrupt gradients with Mesa 26.2.5.
-# Keep GPU rendering, using the validated linear allocation path.
-export FD_MESA_DEBUG=notile
+unset FD_MESA_DEBUG IR3_SHADER_DEBUG
 export KWIN_COMPOSE=O2
 export KWIN_DRM_DEVICES=/dev/dri/card0
 export QT_QUICK_BACKEND=rhi

@@ -610,31 +610,59 @@ Recovery over SSH/ACM is
 ``/usr/local/libexec/sm7475-restore-software-plasma``. The original software
 session and Xfce recovery remain available.
 
-The hardware session currently sets ``FD_MESA_DEBUG=notile``. This is a
-required rendering workaround: default and ``noubwc`` allocations corrupted
-a 1024x1024 coordinate gradient, while linear allocations passed. A plain
-64x64 color/constant-shader test alone did not reveal this. Native
-Freedreno and Zink/Turnip both showed the default tiled-image error;
-changing the reported GMEM base or the NC macrotile mode did not fix it.
-Those diagnostic overrides were removed. Tiled rendering remains an open
-issue, and Vulkan device enumeration does not establish correct Vulkan
-rendering. Do not remove the linear-allocation workaround based only on
-an EGL renderer string or a uniform-color test.
+Default tiled rendering is now validated; the hardware session clears
+``FD_MESA_DEBUG`` and ``IR3_SHADER_DEBUG`` rather than forcing linear
+allocations. The earlier corruption was observed in a boot where PAS
+rejected the separate stock MBN and the accepted ELF was installed and
+retried without rebooting. With the accepted ELF present from boot,
+the same kernel and Mesa pass the original default-allocation gradient.
+This also passes after another normal reboot with the workaround removed.
+The evidence points to state left by the failed authentication/hot retry;
+no particular residual register or hardware tiling defect has been proven.
 
-With the workaround, KWin reports DRM/EGL, ``freedreno`` and ``FD725``.
-OpenGL 4.6 and OpenGL ES 3.2 are exposed by Mesa 26.2.5. Five clear colors,
-128 small shader frames, three 1024x1024 constant-color shader frames and
-the coordinate-gradient comparison were checked by pixel readback. The
-hardware desktop screenshot is clean with linear allocations. Turnip
-reports Adreno 725 and Vulkan 1.4, but default tiled rendering is not yet
-validated as usable. Evidence and firmware hashes are under the project's
-``archlinuxarm/gpu/`` directory. The verified built-in touch image trio in
-``out-touch-release-20261021`` is the display/touch rollback.
+If authentication has failed during the current boot, install the accepted
+signed ELF, sync and reboot before testing hardware rendering. The setup
+helper refuses a boot whose log contains the firmware initialization
+error. An EGL renderer string or a small uniform-color test alone does not
+establish correct rendering. Changing GMEM base, macrotile mode or shader
+precision is not required by the successful default tests.
 
-A normal ``systemctl reboot`` retained automatic GPU desktop login and
-the linear-allocation setting. GMU 4.0.7 started without authentication
-errors, Oops or GPU faults; the pre-existing single early MDSS fault
-remained. The large gradient passed again after reboot. No diagnostic
-module or preload library was loaded. Systemd was ``running`` with zero
-failed units. The user confirmed the app drawer, application interaction,
-physical screen and touch were normal after reboot.
+Hardware validation, 2026-10-21, with Mesa 26.2.5:
+
+* Native Freedreno and Zink/Turnip pass the original 1024x1024
+  coordinate-gradient readback, with shader caches disabled and no
+  FD/IR3 debugging overrides. The test checks five clear colors and a
+  grid of gradient samples at seven-pixel intervals with tolerance one.
+* A coordinate-coded 1024x1024 CPU texture upload/readback matches all
+  pixels with default allocations and with linear allocations. Sampling
+  that texture into an explicitly linear render target also matches.
+* KWin reports DRM/EGL, ``freedreno`` and ``FD725``. Its scanout buffer
+  uses the QCOM compressed modifier ``0x500000000000001`` at 1240x2772.
+  Desktop screenshots are clean with default allocations.
+* Native Vulkan Wayland presentation through Turnip renders vkcube
+  correctly in a captured frame, and the 1800-frame run exits normally.
+  Turnip reports Adreno 725 and Vulkan 1.4.354. OpenGL 4.6 and OpenGL ES
+  3.2 are exposed by the native driver.
+* A normal ``systemctl reboot`` retains the default hardware desktop.
+  Both native and Zink gradient comparisons pass again. GMU 4.0.7 starts
+  without authentication errors, Oops or new GPU faults. Systemd is
+  ``running`` with zero failed units; touch initializes automatically.
+  No diagnostic module or preload override is used.
+
+The two clean firmware boots are
+``01e797a0-a645-46b6-a51e-358ee14cd058`` and
+``5382b279-c629-4ac5-a3c4-472fdb97a6a4``. The installed kernel and matching
+``out-gpu-reglist-fixed-20261021`` image trio are unchanged by this
+userspace configuration correction. The pre-existing single early MDSS
+fault remains with normal display. The user previously confirmed normal
+screen, app interaction and touch after reboot with linear allocations;
+that earlier physical confirmation must not be relabeled as a default
+allocation test.
+
+Evidence and firmware hashes are under ``archlinuxarm/gpu/``; the default
+allocation retest is in its ``tiling/`` subdirectory, including
+``reboot-api-readback.txt``, ``reboot-validation.txt`` and
+``vulkan-active.png``. These tests do not establish Vulkan conformance,
+arbitrary game compatibility or system suspend/resume. The verified
+built-in touch image trio in ``out-touch-release-20261021`` remains the
+display/touch rollback.
