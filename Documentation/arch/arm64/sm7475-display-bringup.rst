@@ -216,7 +216,10 @@ Build this diagnostic with::
   EXTRA_FRAGMENT_REL=arch/arm64/configs/sm7475-handoff.config \
     bash tools/build-sm7475.sh all
 
-Building without the extra fragment selects the original initialization.
+Initially, building without the extra fragment selected the original
+initialization. Following the verified reset-order fix below, the board's
+normal config enables this guarded handoff and the tested dynamic planes.
+Use ``panel_tianma_nt37705.bootloader_handoff=0`` to compare full initialization.
 Retain the matching known ten-bit images before replacing build output.
 The 2026-10-21 diagnostic build passes compilation, checkpatch, AVB and
 payload hashes, including final kernel/config and USB shell checks. All
@@ -581,27 +584,59 @@ with STATUS 0, IRQ 1 and ACK 0. Original QoS tables and shared attributes
 are restored and temporary modules are unloaded. This does not support a
 repair consisting only of copying the captured VBIF configuration.
 
-Reset sequencing diagnostic
---------------------------
+Verified MDSS reset-order fix
+----------------------------
 
-The normal MDSS initialization pulses reset before acquiring and enabling
-the MDSS clocks. The rejected no-reset test must not be repeated unchanged.
-An independent opt-in comparison, ``msm.mdss_reset_with_clocks=1``, retains
-the reset pulse but enables the four DT-listed MDSS clocks around it. The
-option defaults off and requires root compatible ``qcom,ukee`` and the
-``qcom,sm8450-mdss`` device compatible. ABL replaces the root compatibles
-with ``qcom,ukee-mtp``, ``qcom,ukee`` and ``qcom,mtp``, so checking for the
-source DTS's Realme string would silently skip this test. Clock
-acquisition/enable and reset errors abort initialization;
-clock references are released on exit. It logs the enabled clock count and
-the reset deassertion result/status. No panel, DSC, IOMMU or interconnect
-parameters are changed by this option.
+The original MDSS initialization pulses reset before acquiring and enabling
+the MDSS clocks. A separate comparison retains the same 20 ms reset pulse,
+enabling the four DT-listed MDSS clocks around it. Boot confirms all four
+clock enables and successful reset deassertion. The optional status query
+returns -ENOTSUPP because the Qcom reset provider has no status operation;
+this is not a failed deassertion.
 
-Use ``arch/arm64/configs/sm7475-clocked-reset.config`` as the additional
-configuration fragment. This is a diagnostic hypothesis about reset timing,
-not an established cause or a verified display repair. Preserve the matching
-boot/vendor_boot/dtbo rollback set before testing it. Evidence for the stock
-comparison and QoS controls is in ``out/display-evidence/stock-llcc-20261021``.
+On the 2026-10-21 14:09:06 diagnostic kernel, all nine uniform brightness
+packets pass, including the formerly failing path-0 offsets. The user
+confirms normal text with no horizontal lines or missing strokes. Following
+a user-confirmed manual reboot, eighteen distinct packets using DMA32 and
+36-bit physical addresses all execute their own data correctly. A further
+nine-command control after writeback also passes. The restart was manual,
+not evidence of an automatic crash.
+
+A valid 640x64 writeback contains 40960 opaque white pixels. A separate
+hardware-producer/consumer chain writes an XRGB8888 middle buffer and reuses
+it as RGB565 input without CPU modification. Both fences report success,
+all 64 rows match, and middle/output are both all 0xffffffff, SHA256
+5639b95c2f8d2a2d92aa71f3c2414032aff8b9cbfa2f63e252461f70df35da84.
+The old 256-byte missing-source pattern is absent from these valid outputs.
+One ordinary repeated writeback instead times out and leaves an all-zero
+output despite its signaled fence. That untouched buffer is not a valid
+read-correctness result; repeated writeback completion still needs work.
+
+The regular DSI driver also reads brightness with FIFO disabled. With a
+one-second settling interval, both its normal DMA and FIFO paths apply
+brightness 1024/2048 and read 4096/8192, matching this panel's existing
+readback convention. Immediate reads can still show the previous value.
+FIFO remains enabled in the known working profile, and brightness is
+restored to 2048. All temporary modules are unloaded. An earlier shell
+redirection failed to expand a wildcard, so those two attempted writes are
+not counted. The original console reader also stops after short output
+gaps; delayed tests use a completion marker instead.
+
+The verified reset sequence is now automatic for root compatible
+``qcom,ukee`` with device compatible ``qcom,sm8450-mdss``. ABL replaces the
+root compatibles with ``qcom,ukee-mtp``, ``qcom,ukee`` and ``qcom,mtp``, so
+the source DTS's Realme string cannot guard it. Clock acquisition/enable
+and reset errors abort initialization, and clock references are released
+on exit. Other platforms retain their reset clock sequence. No extra reset
+parameter is required; the old opt-in fragment/parameter is removed.
+The test establishes the required sequencing, not which individual clock
+is sufficient or the underlying RTL failure. Keep the normal MDSS reset;
+the earlier no-reset experiment remains rejected.
+
+The normal board config now selects the already validated panel handoff
+and dynamic plane allocation. LLCC remains disabled in the source DT, as
+before; the first successful image used the archived LLCC diagnostic DTB.
+Evidence is in ``out/display-evidence/stock-llcc-20261021/clocked-reset-*``.
 
 Build and recovery
 ==================

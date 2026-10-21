@@ -7,7 +7,6 @@
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/interconnect.h>
-#include <linux/moduleparam.h>
 #include <linux/irq.h>
 #include <linux/irqchip.h>
 #include <linux/irqdesc.h>
@@ -24,12 +23,6 @@
 #include <generated/mdss.xml.h>
 
 #define MIN_IB_BW	400000000UL /* Min ib vote 400MB */
-
-/* Opt-in bring-up comparison; the normal reset sequence stays unchanged. */
-static bool mdss_reset_with_clocks;
-module_param(mdss_reset_with_clocks, bool, 0400);
-MODULE_PARM_DESC(mdss_reset_with_clocks,
-		"Enable MDSS clocks around the reset on the SM7475 test board");
 
 struct msm_mdss_data {
 	u32 reg_bus_bw;
@@ -361,8 +354,12 @@ static int msm_mdss_reset(struct device *dev)
 				     "failed to acquire mdss reset\n");
 	}
 
-	if (mdss_reset_with_clocks &&
-	    of_machine_is_compatible("qcom,ukee") &&
+	/*
+	 * On SM7475, resetting with these clocks gated leaves display read
+	 * path 0 returning incorrect data. Keep both AXI clocks, AHB and MDP
+	 * running through the reset. ABL replaces board compatibles with Ukee.
+	 */
+	if (of_machine_is_compatible("qcom,ukee") &&
 	    of_device_is_compatible(dev->of_node, "qcom,sm8450-mdss")) {
 		num_clocks = clk_bulk_get_all(dev, &clocks);
 		if (num_clocks < 0) {
@@ -376,7 +373,7 @@ static int msm_mdss_reset(struct device *dev)
 		ret = clk_bulk_prepare_enable(num_clocks, clocks);
 		if (ret)
 			goto put_clocks;
-		dev_info(dev, "diagnostic reset with %d MDSS clocks enabled\n",
+		dev_info(dev, "reset with %d MDSS clocks enabled\n",
 			 num_clocks);
 	}
 
@@ -389,9 +386,6 @@ static int msm_mdss_reset(struct device *dev)
 	 */
 	msleep(20);
 	ret = reset_control_deassert(reset);
-	if (num_clocks)
-		dev_info(dev, "diagnostic reset deassert ret=%d status=%d\n",
-			 ret, reset_control_status(reset));
 
 disable_clocks:
 	if (num_clocks)
