@@ -561,6 +561,25 @@ maps message buffers through its wrapper device, whose iommus property
 was missing here. Add the wrapper's 0x5a3 mapping without changing the
 GPI ring mapping. The next diagnostic images, ``out-touch-smmu-20261021``,
 have the same kernel and module bytes as the module-only build and a DTB
-with the wrapper mapping. AVB and payload checks passed; hardware
-validation of the mapping and touch events remains pending. Keep using
-the normal battery/desktop images for recovery.
+with the wrapper mapping. AVB and payload checks passed. The wrapper
+joined IOMMU group 1, and both the nine-byte startup read and its
+continuation completed successfully without a restart.
+
+The original S3910 module then identified application S3910PA0B0-15.2,
+build 4284627, coordinates 0..12399 / 0..27719, ten slots and a 128-byte
+report configuration. Udev classified the device as a touchscreen and
+the user confirmed normal Plasma taps and swipes. Evdev captured 937
+frames, up to two simultaneous contacts and 35 complete release frames;
+all recorded coordinates were in range. There were no touch read errors,
+SPI timeouts or new QUP/GPI SMMU faults. The known early MDSS stream
+0x2c00 fault remains. Systemd reported running with no failed units,
+with SDDM, UPower and SSH active and real battery telemetry retained.
+
+The user manually rebooted during event capture. The diagnostic kernel
+requires a manual module load after reboot; loading the same module
+again restored the input device successfully. This restart must not be
+classified as a driver crash. A default built-in release is prepared in
+``out-touch-release-20261021`` with the same DTB and unchanged userdata
+bootstrap. Its AVB, kernel/DTB payload and configuration checks passed;
+automatic initialization and a normal reboot test are still pending.
+The normal battery/desktop images remain available for recovery.
