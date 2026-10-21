@@ -654,10 +654,10 @@ The two clean firmware boots are
 ``5382b279-c629-4ac5-a3c4-472fdb97a6a4``. The installed kernel and matching
 ``out-gpu-reglist-fixed-20261021`` image trio are unchanged by this
 userspace configuration correction. The pre-existing single early MDSS
-fault remains with normal display. The user previously confirmed normal
-screen, app interaction and touch after reboot with linear allocations;
-that earlier physical confirmation must not be relabeled as a default
-allocation test.
+fault remains with normal display. After the default-allocation reboot,
+the user separately confirmed normal physical screen and touch while
+checking the app drawer, swipes and an application. This confirmation
+covers the default tiled/compressed session without ``notile``.
 
 Evidence and firmware hashes are under ``archlinuxarm/gpu/``; the default
 allocation retest is in its ``tiling/`` subdirectory, including
