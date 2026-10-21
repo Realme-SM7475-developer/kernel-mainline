@@ -246,6 +246,47 @@ makes the framebuffer fetch/source-format path a priority for the next
 investigation; the precise cause is still unknown. The user requested a
 pause to shut down the computer, so further experiments stopped.
 
+Fetch-path isolation after resuming, 2026-10-21
+---------------------------------------------
+
+A stricter comparison writes the entire framebuffer to 0xff and verifies
+its complete SHA256 before submitting the image. The user still sees black
+horizontal lines. LM0/LM1 signatures repeatedly read 0x0c0e0bec and
+0xf7eba632, whereas the same full-screen white from SSPP constant colour
+reads 0xa2652535 on both mixers. The difference is already present at the
+mixer outputs, before DSC. This comparison is stronger than comparing a
+mixed test pattern against constant full-screen white.
+
+Disabling CDP, pixel-extension override or the scaler input-depth flag
+does not change the abnormal signatures. Mapping a separately allocated,
+cache-cleaned DMA32 white page repeatedly across an independent scanout
+IOVA range also gives the same signatures. The temporary mapping and
+module were removed after restoring the original source address and
+confirming a frame transfer. ARGB8888, RGB888, RGB565 and XRGB2101010
+comparisons do not restore the constant-white signatures. Reducing the
+source and output width to 620 still gives the abnormal left signature.
+All these temporary controls are restored; they are not retained fixes.
+
+The stock capture includes an active 620-pixel DMA0 source, but it is a
+partial-height layer and does not establish the complete stock fetch
+topology. Do not infer two full-height fetch pipes from that capture.
+
+The optional ``sm7475-virtual-planes.config`` fragment retains panel
+handoff and enables the existing ``msm.dpu_use_virtual_planes=1`` switch.
+The resource manager prefers DMA SSPPs for unscaled RGB planes, unlike
+the current primary plane fixed to VIG0. This provides a different fetch
+path through normal DRM resource allocation. Verify the actual assigned
+SSPP in live DRM state before interpreting the result. The fragment is
+a diagnostic comparison. Its full kernel/DTB build, AVB, image and payload
+hashes, effective boot parameters and USB shell payload checks pass. The
+2026-10-21 10:53 kernel was flashed and boots with the USB shell and panel
+handoff intact. Live state confirms SSPP_DMA0 (sspp_8) instead of VIG0.
+The user still reports horizontal lines and incomplete text, so changing
+the SSPP type alone is not a fix. Repeating the full-white memory test on
+DMA0 produces the same framebuffer SHA256 and the same two abnormal mixer
+signatures as VIG0. This prioritizes their shared memory-fetch path over
+a fault specific to one SSPP type.
+
 Build and recovery
 ==================
 
