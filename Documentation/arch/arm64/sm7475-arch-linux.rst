@@ -284,3 +284,81 @@ References:
 * https://man.archlinux.org/man/extra/xorg-server/modesetting.4.en
 * https://wiki.freedesktop.org/www/Software/LightDM/CommonConfiguration/
 * https://docs.xfce.org/xfce/xfce4-session/start
+
+Plasma Mobile on Wayland
+-----------------------
+
+The optional Plasma Mobile setup retains the verified Xfce installation
+as a recovery session. From the persistent Arch phone, copy and run
+``tools/boot/sm7475-arch/setup-plasma-mobile``::
+
+  bash setup-plasma-mobile --install-packages
+
+This requires the ``setup-desktop`` Xfce fallback to have been configured
+first. It installs Plasma Mobile, settings, QMLKonsole, SDDM and diagnostic
+utilities. It prepares an SDDM automatic Wayland login as ``alarm`` and
+leaves display-manager selection unchanged until explicitly switched.
+SDDM's greeter uses the known Xorg path; the selected user session is
+native Wayland on DRM.
+No kernel build, boot image replacement or userdata formatting is involved.
+
+The session forces KWin's DRM device to ``/dev/dri/card0`` and uses Mesa
+llvmpipe with ``kms_swrast``. KWin 6.8's DRM backend advertises only OpenGL
+compositing, so ``KWIN_COMPOSE=O2`` selects its software GL path; the old
+QPainter override is unsuitable for this version. Qt Quick uses
+``QT_QUICK_BACKEND=rhi`` and ``QSG_RHI_BACKEND=opengl`` on the same software
+renderer. Using ``QT_QUICK_BACKEND=software`` instead left the application
+drawer blank: its masks and shader effects need the GL scene graph.
+
+The setup skips the initial wizard, disables automatic locking, idle
+screen dimming/off and automatic suspend because touch input is not yet
+available. It keeps the networkd-managed USB gadget outside any future
+NetworkManager management. These are bring-up settings to review after
+touch and power management become available.
+
+For the first switch, schedule a timed Xfce recovery before stopping the
+working display manager::
+
+  systemd-run --unit=sm7475-mobile-rollback --on-active=180s \
+    /usr/local/libexec/sm7475-restore-xfce
+  systemctl stop lightdm
+  systemctl start sddm
+
+After verifying the mobile shell and applications, cancel the timer and
+enable the new display manager for subsequent boots::
+
+  systemctl stop sm7475-mobile-rollback.timer
+  systemctl disable lightdm
+  systemctl enable sddm
+  systemctl set-default graphical.target
+
+To restore Xfce over SSH or the ACM root shell::
+
+  /usr/local/libexec/sm7475-restore-xfce
+
+Device validation, 2026-10-21: Plasma Mobile/KWin 6.8.0, SDDM 0.21.0 and
+Mesa 26.2.5 booted with KWin reporting DRM, EGL and llvmpipe (LLVM 23.1.3).
+The shell identified itself as ``org.kde.plasma.mobileshell``. Its app
+drawer displayed application icons and QMLKonsole ran successfully. The
+native display remained 1240x2772; the mobile preset used scale 3. A
+controlled reboot retained automatic SDDM login and the RHI configuration,
+with systemd ``running`` and no failed units. SSH, ACM commands, USB
+networking and HTTPS passed. The user confirmed normal physical display.
+
+The kernel remains the existing 6.18.0 build and the root remains
+userdata/ext4. Available RAM was about 4.8 GiB, with about 211 GiB of free
+disk space. This is CPU rendering; GPU acceleration and touch are still
+unavailable. Diagnostic screenshots and logs are under
+``archlinuxarm/plasma-mobile/``, particularly ``reboot-validation.txt``,
+``reboot-support-info.txt``, ``reboot-outputs.txt`` and
+``reboot-serial-validation.txt``.
+
+Wayland socket names are not fixed: this session used ``wayland-1``.
+When running graphical diagnostics through SSH, obtain WAYLAND_DISPLAY
+from the actual session environment rather than assuming ``wayland-0``.
+
+References:
+
+* https://archlinuxarm.org/packages/aarch64/plasma-mobile
+* https://github.com/KDE/kwin/blob/v6.8.0/src/backends/drm/drm_backend.cpp
+* https://doc.qt.io/qt-6/qtquick-visualcanvas-adaptations-software.html

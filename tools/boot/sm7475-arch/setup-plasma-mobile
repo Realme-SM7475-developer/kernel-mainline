@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
+# Optional Plasma Mobile session on the validated persistent Arch installation.
+set -euo pipefail
+die() { echo "ERROR: $*" >&2; exit 1; }
+[[ $# == 0 || ( $# == 1 && $1 == --install-packages ) ]] ||
+    die 'Usage: setup-plasma-mobile [--install-packages]'
+[[ $EUID == 0 && $(uname -m) == aarch64 ]] || die 'Run as root on the phone'
+[[ $(readlink /proc/1/exe) == /usr/lib/systemd/systemd ]] || die 'Arch systemd must be PID 1'
+[[ -e /etc/sm7475-arch-root && -e /sys/class/drm/card0-DSI-1 ]] ||
+    die 'The persistent Arch root and DSI display are required'
+[[ -x /usr/local/libexec/sm7475-xfce-session ]] ||
+    die 'Configure and verify the setup-desktop Xfce fallback first'
+[[ ! -e /var/lib/pacman/db.lck ]] || die 'Package manager is busy'
+getent passwd alarm >/dev/null || die 'The alarm user is missing'
+if [[ ${1:-} == --install-packages ]]; then
+    pacman -Syu --needed --noconfirm --disable-download-timeout \
+        plasma-mobile plasma-settings qmlkonsole sddm kscreen spectacle qt6-tools
+fi
+for program in startplasmamobile kwin_wayland sddm kwriteconfig6; do
+    command -v "$program" >/dev/null || die "Missing $program; use --install-packages"
+done
+desktop_home=$(getent passwd alarm | cut -d: -f6)
+desktop_group=$(id -gn alarm)
+install -d -m 0700 -o alarm -g "$desktop_group" "$desktop_home/.config"
+runuser -u alarm -- test -w "$desktop_home/.config" || die 'User configuration is not writable'
+install -d /etc/sddm.conf.d /usr/local/libexec /usr/share/wayland-sessions \
+    /etc/NetworkManager/conf.d
+# Keep the existing networkd-managed USB rescue link if NM is added later.
+cat > /etc/NetworkManager/conf.d/90-sm7475-usb.conf <<'EOF'
+[device-sm7475-usb]
+match-device=mac:02:74:75:00:00:02
+managed=0
+EOF
+cat > /usr/local/libexec/sm7475-plasma-mobile-session <<'EOF'
+#!/bin/sh
+case ${LANG:-C} in C|POSIX) export LANG=C.UTF-8 ;; esac
+export LIBGL_ALWAYS_SOFTWARE=1
+export GALLIUM_DRIVER=llvmpipe
+export MESA_LOADER_DRIVER_OVERRIDE=kms_swrast
+# KWin 6.8's DRM backend requires OpenGL; force the software GL path.
+export KWIN_COMPOSE=O2
+export KWIN_DRM_DEVICES=/dev/dri/card0
+# The mobile shell's masks and effects need shaders even on a CPU renderer.
+export QT_QUICK_BACKEND=rhi
+export QSG_RHI_BACKEND=opengl
+export XWAYLAND_NO_GLAMOR=1
+exec /usr/lib/plasma-dbus-run-session-if-needed /usr/bin/startplasmamobile
+EOF
+chmod 0755 /usr/local/libexec/sm7475-plasma-mobile-session
+cat > /usr/share/wayland-sessions/sm7475-plasma-mobile.desktop <<'EOF'
+[Desktop Entry]
+Name=Plasma Mobile (SM7475 software rendering)
+Exec=/usr/local/libexec/sm7475-plasma-mobile-session
+TryExec=/usr/bin/startplasmamobile
+Type=Application
+DesktopNames=KDE
+EOF
+cat > /etc/sddm.conf.d/50-sm7475-mobile.conf <<'EOF'
+[General]
+DisplayServer=x11
+GreeterEnvironment=QT_QUICK_BACKEND=software,LIBGL_ALWAYS_SOFTWARE=1
+[Autologin]
+User=alarm
+Session=sm7475-plasma-mobile.desktop
+Relogin=false
+[X11]
+ServerArguments=-nolisten tcp -dpi 192
+EOF
+# No touch input is available for the wizard or for waking a blanked screen.
+for key in Autolock LockOnResume; do
+    runuser -u alarm -- kwriteconfig6 --file kscreenlockerrc --group Daemon \
+        --key "$key" --type bool false
+done
+runuser -u alarm -- kwriteconfig6 --file plasmamobilerc --group InitialStart \
+    --key wizardRun --type bool true
+for profile in AC Battery LowBattery; do
+    for key in DimDisplayWhenIdle TurnOffDisplayWhenIdle; do
+        runuser -u alarm -- kwriteconfig6 --file powerdevilrc --group "$profile" \
+            --group Display --key "$key" --type bool false
+    done
+    runuser -u alarm -- kwriteconfig6 --file powerdevilrc --group "$profile" \
+        --group SuspendAndShutdown --key AutoSuspendAction 0
+done
+cat > /usr/local/libexec/sm7475-restore-xfce <<'EOF'
+#!/bin/sh
+systemctl stop sddm
+systemctl disable sddm
+systemctl enable lightdm --force
+systemctl start lightdm
+EOF
+chmod 0755 /usr/local/libexec/sm7475-restore-xfce
+echo 'Configured the Plasma Mobile Wayland session; display manager selection is unchanged.'
+echo 'Use the documented timed rollback for the first SDDM test.'
+echo 'After verification: systemctl disable lightdm; systemctl enable sddm'
+echo 'Xfce recovery over SSH/ACM: /usr/local/libexec/sm7475-restore-xfce'
