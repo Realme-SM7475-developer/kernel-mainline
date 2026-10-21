@@ -1,0 +1,161 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/*
+ * The stock adsp2 firmware exposes USB supply telemetry over PMIC GLINK.
+ * Battery telemetry comes from the external BQ28Z610 on QUP0 SE0.
+ * Addresses and SMP2P IDs were checked against this phone's stock DT.
+ */
+#include <dt-bindings/mailbox/qcom-ipcc.h>
+#include <dt-bindings/dma/qcom-gpi.h>
+
+/ {
+	pmic-glink {
+		compatible = "qcom,sm8450-pmic-glink", "qcom,pmic-glink";
+		qcom,external-fuel-gauge = <&mainline_battery>;
+	};
+
+	smp2p-adsp {
+		compatible = "qcom,smp2p";
+		qcom,smem = <443>, <429>;
+		interrupts-extended = <&mainline_ipcc IPCC_CLIENT_LPASS
+				      IPCC_MPROC_SIGNAL_SMP2P IRQ_TYPE_EDGE_RISING>;
+		mboxes = <&mainline_ipcc IPCC_CLIENT_LPASS IPCC_MPROC_SIGNAL_SMP2P>;
+		qcom,local-pid = <0>;
+		qcom,remote-pid = <2>;
+
+		adsp_smp2p_out: master-kernel {
+			qcom,entry-name = "master-kernel";
+			#qcom,smem-state-cells = <1>;
+		};
+
+		adsp_smp2p_in: slave-kernel {
+			qcom,entry-name = "slave-kernel";
+			interrupt-controller;
+			#interrupt-cells = <2>;
+		};
+	};
+};
+
+/* Retain the stock node path for ABL's reserved-memory fixups. */
+&adsp_mem {
+	reg = <0 0x85700000 0 0x2800000>;
+};
+
+/* These copied downstream instances must not bind the mainline singleton. */
+&m_qcom_pmic_glink {
+	status = "disabled";
+};
+
+&m_qcom_pmic_glink_log {
+	status = "disabled";
+};
+
+&tlmm {
+	mainline_gauge_active: gauge-active-state {
+		pins = "gpio0", "gpio1";
+		function = "qup0";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	mainline_gauge_sleep: gauge-sleep-state {
+		pins = "gpio0", "gpio1";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+};
+
+&qupv3_0 {
+	mainline_gauge_i2c: i2c@980000 {
+		compatible = "qcom,geni-i2c";
+		reg = <0 0x00980000 0 0x4000>;
+		clocks = <&gcc GCC_QUPV3_WRAP0_S0_CLK>;
+		clock-names = "se";
+		interrupts = <GIC_SPI 601 IRQ_TYPE_LEVEL_HIGH>;
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&mainline_gauge_active>;
+		pinctrl-1 = <&mainline_gauge_sleep>;
+		clock-frequency = <100000>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		dmas = <&mainline_gpi_dma0 0 0 QCOM_GPI_I2C>,
+		       <&mainline_gpi_dma0 1 0 QCOM_GPI_I2C>;
+		dma-names = "tx", "rx";
+
+		mainline_battery: fuel-gauge@55 {
+			compatible = "ti,bq28z610";
+			reg = <0x55>;
+		};
+	};
+};
+
+&soc {
+	mainline_gpi_dma0: dma-controller@900000 {
+		compatible = "qcom,sm8450-gpi-dma", "qcom,sm6350-gpi-dma";
+		reg = <0x00900000 0x60000>;
+		interrupts = <GIC_SPI 244 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 245 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 246 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 247 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 248 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 249 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 250 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 251 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 252 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 253 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 254 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 255 IRQ_TYPE_LEVEL_HIGH>;
+		#dma-cells = <3>;
+		dma-channels = <12>;
+		dma-channel-mask = <0x7e>;
+		iommus = <&mainline_apps_smmu 0x5b6 0>;
+	};
+
+	remoteproc_adsp: remoteproc@3000000 {
+		compatible = "qcom,sm8450-adsp-pas";
+		reg = <0x03000000 0x10000>;
+		interrupts-extended = <&pdc 6 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 1 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 2 IRQ_TYPE_EDGE_RISING>,
+				      <&adsp_smp2p_in 3 IRQ_TYPE_EDGE_RISING>;
+		interrupt-names = "wdog", "fatal", "ready", "handover", "stop-ack";
+		clocks = <&rpmhcc RPMH_CXO_CLK>;
+		clock-names = "xo";
+		power-domains = <&rpmhpd RPMHPD_LCX>, <&rpmhpd RPMHPD_LMX>;
+		power-domain-names = "lcx", "lmx";
+		memory-region = <&adsp_mem>;
+		firmware-name = "qcom/sm7475/realme/gt-neo5-se/adsp2.mdt";
+		qcom,qmp = <&aoss_qmp>;
+		qcom,smem-states = <&adsp_smp2p_out 0>;
+		qcom,smem-state-names = "stop";
+
+		glink-edge {
+			interrupts-extended = <&mainline_ipcc IPCC_CLIENT_LPASS
+					      IPCC_MPROC_SIGNAL_GLINK_QMP IRQ_TYPE_EDGE_RISING>;
+			mboxes = <&mainline_ipcc IPCC_CLIENT_LPASS
+				  IPCC_MPROC_SIGNAL_GLINK_QMP>;
+			label = "lpass";
+			qcom,remote-pid = <2>;
+		};
+	};
+
+	aoss_qmp: power-management@c300000 {
+		compatible = "qcom,sm8450-aoss-qmp", "qcom,aoss-qmp";
+		reg = <0x0c300000 0x400>;
+		interrupts-extended = <&mainline_ipcc IPCC_CLIENT_AOP
+				      IPCC_MPROC_SIGNAL_GLINK_QMP IRQ_TYPE_EDGE_RISING>;
+		mboxes = <&mainline_ipcc IPCC_CLIENT_AOP IPCC_MPROC_SIGNAL_GLINK_QMP>;
+		#clock-cells = <0>;
+	};
+
+	mainline_ipcc: mailbox@ed18000 {
+		compatible = "qcom,sm8450-ipcc", "qcom,ipcc";
+		reg = <0x0ed18000 0x1000>;
+		interrupts = <GIC_SPI 229 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-controller;
+		#interrupt-cells = <3>;
+		#mbox-cells = <2>;
+	};
+};

@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
+# Install the phone's own signed ADSP image without changing firmware partitions.
+set -euo pipefail
+die() { echo "ERROR: $*" >&2; exit 1; }
+[[ $# == 0 && $EUID == 0 && $(uname -m) == aarch64 ]] ||
+    die 'Run setup-battery without arguments as root on the phone'
+[[ -e /etc/sm7475-arch-root ]] || die 'Persistent Arch root required'
+# ABL replaces the board model and root compatibles with its stock strings.
+grep -q 'Ukee MTP, Senna' /proc/device-tree/model || die 'Wrong device'
+grep -qx '0914fed5-f7d5-62a2-c1f8-9f5e24598de7' /etc/sm7475-arch-root ||
+    die 'Wrong persistent root identity'
+[[ $(readlink /proc/1/exe) == /usr/lib/systemd/systemd ]] || die 'Native systemd required'
+command -v python3 >/dev/null || die 'python3 is required to validate the firmware'
+
+# Select by partition label, not an assumed UFS enumeration or active Android slot.
+firmware_partition=/dev/disk/by-partlabel/modem_a
+[[ -b $firmware_partition ]] || die 'The original modem_a partition is missing'
+temporary_mount=$(mktemp -d /run/sm7475-modem.XXXXXX)
+cleanup() {
+    if mountpoint -q "$temporary_mount"; then umount "$temporary_mount"; fi
+    rmdir "$temporary_mount"
+}
+trap cleanup EXIT
+mount -t vfat -o ro,nosuid,nodev,noexec "$firmware_partition" "$temporary_mount"
+firmware_source=$temporary_mount/image
+firmware_target=/usr/lib/firmware/qcom/sm7475/realme/gt-neo5-se
+python3 - "$firmware_source" <<'PY'
+import json, struct, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+b = (p / 'adsp2.mdt').read_bytes()
+assert b[:6] == b'\x7fELF\x01\x01', 'Expected a little-endian ELF32 MDT'
+start = struct.unpack_from('<I', b, 28)[0]
+size, count = struct.unpack_from('<HH', b, 42)
+assert size == 32 and start + size * count <= len(b), 'Invalid MDT headers'
+for i in range(count):
+    kind, offset, _, _, length, _, flags, _ = struct.unpack_from('<8I', b, start + i * size)
+    if kind == 1 and length and (flags >> 24) & 7 != 2 and offset + length > len(b):
+        assert (p / f'adsp2.b{i:02d}').stat().st_size == length, f'Missing segment {i}'
+domain = json.loads((p / 'battmgr.jsn').read_text())['sr_domain']
+assert domain == dict(soc='msm', domain='adsp', subdomain='charger_pd',
+                      qmi_instance_id=74), 'Unexpected charger service mapping'
+PY
+install -d "$firmware_target" /usr/local/libexec
+install -m 0644 "$firmware_source"/adsp2.mdt "$firmware_source"/adsp2.b[0-9][0-9] \
+    "$firmware_source"/battmgr.jsn "$firmware_target/"
+for file in "$firmware_source"/adsp2.mdt "$firmware_source"/adsp2.b[0-9][0-9]; do
+    cmp "$file" "$firmware_target/${file##*/}"
+done
+(cd "$firmware_target" && sha256sum adsp2.mdt adsp2.b[0-9][0-9] battmgr.jsn > SHA256SUMS)
+
+cat > /usr/local/libexec/sm7475-start-adsp <<'EOF'
+#!/bin/sh
+set -eu
+expected=qcom/sm7475/realme/gt-neo5-se/adsp2.mdt
+for remote in /sys/class/remoteproc/remoteproc*; do
+    [ -r "$remote/firmware" ] || continue
+    [ "$(cat "$remote/firmware")" = "$expected" ] || continue
+    case $(cat "$remote/state") in
+        running) exit 0 ;;
+        offline) echo start > "$remote/state" ;;
+        *) echo 'ADSP is in an unexpected state; leaving it unchanged' >&2; exit 1 ;;
+    esac
+    [ "$(cat "$remote/state")" = running ]
+    exit
+done
+echo 'ADSP remoteproc missing: boot the matching battery-enabled kernel and DTB' >&2
+exit 1
+EOF
+chmod 0755 /usr/local/libexec/sm7475-start-adsp
+cat > /etc/systemd/system/sm7475-adsp.service <<'EOF'
+[Unit]
+Description=Start the stock ADSP for USB supply telemetry after mounting the Arch root
+After=local-fs.target
+ConditionPathExists=/usr/lib/firmware/qcom/sm7475/realme/gt-neo5-se/adsp2.mdt
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/sm7475-start-adsp
+RemainAfterExit=yes
+TimeoutStartSec=25
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable sm7475-adsp.service
+echo 'Installed stock ADSP firmware and enabled its post-root startup service.'
+echo 'Start sm7475-adsp.service after booting the matching kernel and DTB.'

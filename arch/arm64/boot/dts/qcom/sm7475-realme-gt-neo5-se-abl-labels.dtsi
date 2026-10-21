@@ -251,8 +251,6 @@
 		adsp_mem_heap: abl-shim-89 { };
 		adsp_notify: abl-shim-90 { };
 		adsp_pas: abl-shim-91 { };
-		adsp_smp2p_in: abl-shim-92 { };
-		adsp_smp2p_out: abl-shim-93 { };
 		afe: abl-shim-94 { };
 		afe_loopback_tx: abl-shim-95 { };
 		afe_pcm_rx: abl-shim-96 { };
@@ -268,7 +266,6 @@
 		aop_cmd_db_mem: abl-shim-106 { };
 		aop_config_mem: abl-shim-107 { };
 		aop_image_mem: abl-shim-108 { };
-		aoss_qmp: abl-shim-109 { };
 		apc1_cluster: abl-shim-110 { };
 		apps_bcm_voter: abl-shim-111 { };
 		apss_atb_cti: abl-shim-112 { };

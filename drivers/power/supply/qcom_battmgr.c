@@ -1218,7 +1218,8 @@ static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
 	case NOTIF_BAT_STATUS:
 	case NOTIF_BAT_PROPERTY:
 	case NOTIF_BAT_CHARGING_STATE:
-		power_supply_changed(battmgr->bat_psy);
+		if (battmgr->bat_psy)
+			power_supply_changed(battmgr->bat_psy);
 		break;
 	case NOTIF_USB_PROPERTY:
 		power_supply_changed(battmgr->usb_psy);
@@ -1602,9 +1603,16 @@ static void qcom_battmgr_enable_worker(struct work_struct *work)
 	};
 	int ret;
 
+	mutex_lock(&battmgr->lock);
 	ret = qcom_battmgr_request(battmgr, &req, sizeof(req));
+	mutex_unlock(&battmgr->lock);
 	if (ret)
 		dev_err(battmgr->dev, "failed to request power notifications\n");
+
+	/* Initial reads may have returned -EAGAIN before the service was up. */
+	if (battmgr->bat_psy)
+		power_supply_changed(battmgr->bat_psy);
+	power_supply_changed(battmgr->usb_psy);
 }
 
 static void qcom_battmgr_pdr_notify(void *priv, int state)
@@ -1639,6 +1647,7 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 	const struct of_device_id *match;
 	struct qcom_battmgr *battmgr;
 	struct device *dev = &adev->dev;
+	bool external_gauge;
 	int ret;
 
 	battmgr = devm_kzalloc(dev, sizeof(*battmgr), GFP_KERNEL);
@@ -1646,6 +1655,7 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 		return -ENOMEM;
 
 	battmgr->dev = dev;
+	external_gauge = device_property_present(dev->parent, "qcom,external-fuel-gauge");
 
 	psy_cfg.drv_data = battmgr;
 	psy_cfg.fwnode = dev_fwnode(&adev->dev);
@@ -1665,6 +1675,11 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 	else
 		battmgr->variant = QCOM_BATTMGR_SM8350;
 
+	/* Property-based firmware reports charge values, without a BAT_INFO unit. */
+	if (battmgr->variant == QCOM_BATTMGR_SM8350 ||
+	    battmgr->variant == QCOM_BATTMGR_SM8550)
+		battmgr->unit = QCOM_BATTMGR_UNIT_mAh;
+
 	ret = qcom_battmgr_charge_control_thresholds_init(battmgr);
 	if (ret < 0)
 		return dev_err_probe(dev, ret,
@@ -1677,10 +1692,12 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 		else
 			psy_desc = &sc8280xp_bat_psy_desc;
 
-		battmgr->bat_psy = devm_power_supply_register(dev, psy_desc, &psy_cfg);
-		if (IS_ERR(battmgr->bat_psy))
-			return dev_err_probe(dev, PTR_ERR(battmgr->bat_psy),
-					     "failed to register battery power supply\n");
+		if (!external_gauge) {
+			battmgr->bat_psy = devm_power_supply_register(dev, psy_desc, &psy_cfg);
+			if (IS_ERR(battmgr->bat_psy))
+				return dev_err_probe(dev, PTR_ERR(battmgr->bat_psy),
+						     "failed to register battery power supply\n");
+		}
 
 		battmgr->ac_psy = devm_power_supply_register(dev, &sc8280xp_ac_psy_desc, &psy_cfg_supply);
 		if (IS_ERR(battmgr->ac_psy))
@@ -1702,10 +1719,12 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 		else
 			psy_desc = &sm8350_bat_psy_desc;
 
-		battmgr->bat_psy = devm_power_supply_register(dev, psy_desc, &psy_cfg);
-		if (IS_ERR(battmgr->bat_psy))
-			return dev_err_probe(dev, PTR_ERR(battmgr->bat_psy),
-					     "failed to register battery power supply\n");
+		if (!external_gauge) {
+			battmgr->bat_psy = devm_power_supply_register(dev, psy_desc, &psy_cfg);
+			if (IS_ERR(battmgr->bat_psy))
+				return dev_err_probe(dev, PTR_ERR(battmgr->bat_psy),
+						     "failed to register battery power supply\n");
+		}
 
 		battmgr->usb_psy = devm_power_supply_register(dev, &sm8350_usb_psy_desc, &psy_cfg_supply);
 		if (IS_ERR(battmgr->usb_psy))

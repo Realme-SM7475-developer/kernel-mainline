@@ -50,6 +50,14 @@ properties:
   '#size-cells':
     const: 0
 
+  qcom,external-fuel-gauge:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description:
+      External fuel gauge connected directly to the application processor.
+      On these boards the PMIC GLINK firmware exposes placeholder battery
+      values. Battery telemetry is provided by the external gauge instead,
+      while PMIC GLINK continues to provide USB supply information.
+
   orientation-gpios:
     description: Array of input gpios for the Type-C connector orientation indication.
       The GPIO indication is used to detect the orientation of the Type-C connector.

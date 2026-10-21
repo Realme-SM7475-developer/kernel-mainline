@@ -362,3 +362,84 @@ References:
 * https://archlinuxarm.org/packages/aarch64/plasma-mobile
 * https://github.com/KDE/kwin/blob/v6.8.0/src/backends/drm/drm_backend.cpp
 * https://doc.qt.io/qt-6/qtquick-visualcanvas-adaptations-software.html
+
+Battery telemetry bring-up
+-------------------------
+
+The ADSP/PMIC GLINK reference is ``iLtanaka/linux-marble`` at commit
+``c9f87aac17d306786d1d15f67d8bdd226770e27a``. This phone additionally has
+an AP-connected external gauge: stock DTBO entry 0 declares a gauge at
+QUP0 SE0 (0x980000), address 0x55, with ``qcom,batt_bq28z610``. Its pins
+are GPIO0/1, function qup0, at 100 kHz. Use the mainline ``ti,bq28z610``
+driver for battery readings; do not copy Marble's battery design values,
+Xiaomi authentication messages or shifted property IDs.
+
+The first ADSP-only hardware test booted successfully and registered
+power supplies, but its battery reported ``QCOMMBATT01``, fixed 50%, 4 V,
+25 degrees C and zero full capacity/current. These are not validated
+battery readings. The PMIC GLINK node now references the external gauge
+with ``qcom,external-fuel-gauge``; the battery manager omits its firmware
+battery supply and still exposes USB supply telemetry. This avoids
+combining a placeholder battery with the physical battery in UPower.
+An attempted UPOWER_IGNORE udev rule did not work with UPower 1.91.5;
+it was removed and is not part of the setup.
+
+``sm7475-realme-gt-neo5-se-battery.dtsi`` describes the gauge, GENI I2C,
+GPI DMA, IPCC, AOSS QMP, ADSP SMP2P, PAS remoteproc and GLINK edge. Stock
+GPI DMA uses 0x900000, interrupts 244-255, mask 0x7e and SMMU stream
+0x5b6. The ADSP carveout is 40 MiB at 0x85700000, matching this phone's
+stock DT and ABL fixups; its original node path is retained. The copied
+downstream PMIC GLINK and log instances are disabled to avoid binding
+the mainline singleton twice. USB retains peripheral mode.
+
+The in-kernel PD mapper uses the SM8350 domain table, including
+``msm/adsp/charger_pd`` at QMI instance 74, checked against the phone's
+``battmgr.jsn``. ABL replaces root model/compatibles with Ukee MTP, Senna
+and ``qcom,ukee``, so the mapper recognizes that stock identity too.
+The board fragment builds these dependencies in because the persistent
+Arch root has no modules matching the custom 6.18 kernel.
+
+On the persistent Arch phone, copy and run
+``tools/boot/sm7475-arch/setup-battery``::
+
+  bash setup-battery
+
+The script mounts ``modem_a`` read-only, checks the ELF32 segment files
+and charger service mapping, then copies ``adsp2.mdt``, its segments and
+``battmgr.jsn`` into
+``/usr/lib/firmware/qcom/sm7475/realme/gt-neo5-se/``. Copied bytes are
+checked and recorded in SHA256SUMS. Firmware is device-specific and is
+not included in the repository. No firmware partition is changed.
+
+``sm7475-adsp.service`` starts the matching offline remoteproc after
+userdata is mounted, retrying the early request that precedes
+switch_root. It leaves an already running processor alone and reports
+unexpected states instead of forcing a restart. Notification requests
+use the battery manager request mutex, and supply-change events after
+startup refresh earlier ``-EAGAIN`` reads.
+
+Hardware validation, 2026-10-21: the external gauge reported 54%, about
+7.71 V, 30.8-31.6 degrees C, 947 mAh remaining and 1778 mAh full capacity.
+UPower exposed one battery, sourced from BQ28Z610; the placeholder
+``qcom-battmgr-bat`` was absent. A Plasma Mobile screenshot showed 54%
+in the status bar and the user confirmed the physical display.
+
+A controlled reboot retained the BQ28Z610 battery, automatic ADSP startup
+and the 54% desktop indication. Systemd was running with no failed units;
+SDDM, UPower, SSH, networkd and the ACM rescue shell were active. USB
+networking, HTTPS and actual ACM battery reads passed. The userdata
+root and desktop configuration were retained. No I2C timeouts or gauge
+read errors were observed. The known single pre-reset MDSS SMMU fault
+on stream 0x2800 remains, with normal display.
+
+Evidence is under ``archlinuxarm/battery/``, including
+``gauge-image-validation.json``, ``gauge-first-boot.txt``,
+``gauge-upower.txt``, ``gauge-desktop.png``,
+``gauge-reboot-validation.txt`` and ``gauge-reboot-serial.txt``.
+The USB supply reported online while the battery reported a small
+net discharge; do not infer validated battery charging from USB online.
+No gauge calibration, authentication or fast charge controls are
+programmed. Full charging, protection and thermal management still
+need separate validation. Before returning to the older kernel without
+ADSP support, disable ``sm7475-adsp.service`` to avoid a missing-device
+service failure; it does not block the existing desktop recovery path.
