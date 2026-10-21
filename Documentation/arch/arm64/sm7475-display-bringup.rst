@@ -430,6 +430,45 @@ buffer allocation or its cache-clean loop.
 Source provenance:
 https://github.com/realme-kernel-opensource/realme_GTNeo5SE-AndroidB-kernel-source/blob/master/drivers/soc/qcom/llcc_qcom.c
 
+Additional read-path controls and rejected reset test
+----------------------------------------------------
+
+The stock SDE driver clears VBIF OUT_AXI_ASHARED/OUT_AXI_AINNERSHARED in
+its memory-type setup, whereas mainline reads 0x3fff/0. A reversible
+comparison clearing OUT_AXI_ASHARED does not repair the command offsets
+or establish a repeatable writeback improvement. The original value is
+restored. A bounded 1240x24 DMA0 white-source test also compares IOMMU_CACHE
+off/on and XIN1 outer-shareable off/on. All four cases retain mixer
+signatures 0x4991cc74/0x27864040, against constant-white 0x3f90720c on both
+mixers. Source address, geometry and VBIF controls are restored, and the
+owned allocation and mapping are freed.
+
+The writeback tool now queries SYNC_IOC_FILE_INFO in addition to polling.
+The baseline alternating-image capture reports fence status 1, success.
+A two-job standard atomic comparison first writes an XRGB8888 image into
+a middle buffer, then reuses that hardware-written buffer as an RGB565
+source for a second output. The CPU does not modify the middle buffer
+between the two jobs. In a valid capture both fences report success.
+The middle buffer contains 20480 opaque black pixels. Its actual bytes
+predict 448 coloured RGB565 pixels per row, but the second output has
+only 256. All 192 incorrectly black pixels per row have source byte
+address bit 8 clear; none have bit 8 set. All 64 rows agree. The RGB565
+interpretation scales the affected output regions with source bytes,
+strengthening the read-side diagnosis independently of CPU source writes.
+
+Some repeated writeback attempts instead produce an all-zero first
+buffer, even with a successful fence; their subsequent all-black outputs
+are uninformative for this nonzero-data comparison. Preserve raw buffer
+checks and distinguish these cases from the valid chained capture.
+
+A separately packaged DTB removes only the MDSS reset property, keeping
+the same kernel and panel parameters. It boots with USB, but DSI setup and
+panel handoff time out, and the user reports a brief corrupted image then
+black. The first white writeback is uniform, but a repeat is all black.
+Do not treat that first result as proof that skipping reset fixes reads.
+This experiment is rejected and the previous three images, including the
+normal MDSS reset, are restored. The repository DT retains that reset.
+
 Build and recovery
 ==================
 
