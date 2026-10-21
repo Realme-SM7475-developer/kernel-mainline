@@ -4,13 +4,17 @@ Arch Linux ARM bootstrap on the Realme GT Neo5 SE
 ===============================================
 
 The opt-in bootstrap uses the existing Android v4 boot/vendor_boot/dtbo
-layout and the verified SM7475 display kernel. It downloads a pinned Arch
-Linux ARM AArch64 rootfs over a dedicated USB Ethernet link and extracts
-it onto a 4 GiB tmpfs. No partition is formatted or used to store the rootfs.
+layout and the verified SM7475 display kernel. The default RAM mode downloads
+a pinned Arch Linux ARM AArch64 rootfs over a dedicated USB Ethernet link
+and extracts it onto a 4 GiB tmpfs. No partition is formatted or used to store the rootfs.
 The installation and its changes are lost when the device reboots.
 
-Storage inspection found a 16 MiB metadata partition and no directly
-recognizable plaintext filesystem on userdata. This does not imply that
+An optional persistent mode boots an installed ext4 root on userdata
+automatically. It requires an explicitly authorized destructive installation,
+described below. It does not download or extract a rootfs at boot.
+
+Before installation, storage inspection found a 16 MiB metadata partition
+and no directly recognizable plaintext filesystem on userdata. This does not imply that
 userdata is empty. Keep the working three-image rollback set intact.
 
 Prerequisites
@@ -180,6 +184,33 @@ An absent or invalid installation leaves the ACM rescue shell available;
 the initramfs never formats a partition. In that shell, ``arch-prepare``
 retries mounting userdata and ``arch-boot`` requests the handoff.
 
-The persistent mode is prepared for testing. The RAM-root device validation
-above does not establish that userdata installation or reboot persistence
-has passed on hardware.
+Persistent device validation, 2026-10-21
+--------------------------------------
+
+After explicit authorization to erase Android user data, the installer
+completed on the existing 238174662656-byte userdata partition. All five
+e2fsck phases passed. A read-only remount verified the installation marker,
+fstab, core executables, USB configuration and SSH identity against the
+running RAM installation. The partition table was not changed.
+
+The matching ``out-arch-userdata-20261021`` boot/vendor_boot/dtbo set passed
+AVB and payload checks and was flashed to slot a. The kernel, config and
+DTB match the normal-display version. The first automatic boot mounted
+``/dev/sda14`` as the writable ext4 root and ran systemd as PID 1. A
+controlled ``systemctl reboot`` then produced a different boot ID and
+preserved a witness file written before reboot. The SSH identity also
+remained unchanged. No manual rootfs preparation was needed on either boot.
+
+Both boots reported systemd ``running`` without failed units, with sshd,
+systemd-networkd and the ACM rescue shell active. SSH, serial commands and
+HTTPS passed. The root had about 216 GiB free and the phone had about
+6.8 GiB of available RAM after boot. The framebuffer console became ready
+within about 0.72 seconds; the user confirmed normal screen output.
+
+Evidence is in ``archlinuxarm/userdata-install.txt``,
+``userdata-install-readback.txt``, ``userdata-image-validation.json``,
+``userdata-first-boot.txt``, ``userdata-first-serial.txt`` and
+``userdata-reboot-validation.txt``. These checks establish persistent
+console boot; touch, GPU acceleration, wireless and phone power management
+still require separate bring-up. Keep the RAM bootstrap and diagnostic
+rollback images; restoring them does not undo the userdata formatting.
