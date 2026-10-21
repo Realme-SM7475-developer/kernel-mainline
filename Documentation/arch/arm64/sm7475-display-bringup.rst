@@ -651,6 +651,52 @@ Evidence is in ``out/display-evidence/stock-llcc-20261021/clocked-reset-*``
 and ``display-fix-*``. The separate repeated-writeback timeout remains
 unresolved; normal text and the original striped-read defect are fixed.
 
+Earlier DRM console handoff
+--------------------------
+
+Keep the clock-enable-to-reset interval free of console output. Enabling
+MDSS clocks resumes ABL's old scanout requests against the replaced SMMU
+mappings. Moving the reset message until after successful deassertion
+shortens this interval without changing the validated reset pulse or clock
+sequence. A single bootloader context fault can still precede reset.
+
+The remaining roughly five-second delay was synchronous UART log replay,
+not a slow clock lookup. Two instrumented boots register ttyMSM0 at
+0.630256/0.610381 seconds, followed by 4.954860/4.953843-second gaps. About
+55291 bytes have accumulated before registration: 115200 baud, 8N1 needs
+at least 4.800 seconds to transmit them. With verbose logging forced by
+``ignore_loglevel``, the serial console replays this backlog during probe.
+The measured second MDSS clock acquisition takes only 18.958/5.990 us;
+no clock prepare-lock hold or consumer wait exceeds 100 ms in those boots.
+Stage printk timestamps alone had misleadingly placed the gap near clock
+lookup, because console flushing can consume time between stage markers.
+
+The normal SM7475 command line now selects ``console=tty0`` without
+``console=ttyMSM0,115200n8``. Verbose messages remain in dmesg, pstore and
+the DRM console; the UART driver remains built in and can be selected
+explicitly in a rebuilt command line when a physical UART is needed.
+Panel handoff, DSC, dynamic planes, FIFO, DTB and USB ramdisk are unchanged.
+Temporary timing instrumentation is not part of the final source.
+
+The 2026-10-21 15:24:44 kernel reaches DRM initialization at 0.433967
+seconds and fb0 at 0.535311 seconds, versus 5.772800 seconds for the earlier
+normal-display image with the relocated reset message. A user-confirmed
+manual reboot gives fb0 at 0.517189 seconds; an agent-issued normal reboot
+gives 0.723928 seconds. These are kernel-monotonic times, not elapsed time
+from pressing the power key. The user confirms normal text appearing
+earlier. All nine distinct command-DMA offsets pass on the new version;
+the diagnostic module is unloaded and brightness/FIFO are restored to
+2048/Y. This does not resolve the separately documented repeated-writeback
+completion problem.
+
+The matching image set is archived in ``out-screen-console-20261021`` and
+copied to the standard ``out`` folder. The previous known-good set remains
+in ``out-display-fix-20261021``. AVB, kernel payload and rollback SHA256
+checks pass; the merged config differs only in the UART console argument,
+and the decoded USB ramdisk and DTB match the previous normal-display set.
+Evidence is in ``out/display-evidence/stock-llcc-20261021/screen-console-*``
+and ``clock-lock-comparison.json``.
+
 Build and recovery
 ==================
 
