@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
+# Add a hardware session after validating the board's MSM GPU and firmware.
+set -euo pipefail
+die() { echo "ERROR: $*" >&2; exit 1; }
+[[ $# == 0 && $EUID == 0 && $(uname -m) == aarch64 ]] ||
+    die 'Run without arguments as root on the phone'
+[[ -e /etc/sm7475-arch-root && -e /sys/class/drm/card0-DSI-1 ]] ||
+    die 'The persistent Arch root and DSI display are required'
+[[ -x /usr/local/libexec/sm7475-plasma-mobile-session ]] ||
+    die 'Configure the software Plasma Mobile fallback first'
+command -v eglinfo >/dev/null || die 'Install mesa-utils first'
+# Opening GBM also exercises firmware loading and GPU hardware initialization.
+probe=$(timeout 30 env -u LIBGL_ALWAYS_SOFTWARE -u GALLIUM_DRIVER \
+    -u MESA_LOADER_DRIVER_OVERRIDE eglinfo -B -p gbm 2>&1) ||
+    die 'GBM/EGL probe failed; keep the software session and inspect dmesg'
+grep -Eq 'renderer:.*(FD725|Adreno.*725)' <<< "$probe" ||
+    die 'EGL did not report the hardware A725 renderer'
+install -d /usr/local/libexec /usr/share/wayland-sessions /etc/sddm.conf.d
+cat > /usr/local/libexec/sm7475-plasma-mobile-gpu-session <<'EOF'
+#!/bin/sh
+case ${LANG:-C} in C|POSIX) export LANG=C.UTF-8 ;; esac
+unset LIBGL_ALWAYS_SOFTWARE GALLIUM_DRIVER MESA_LOADER_DRIVER_OVERRIDE
+unset XWAYLAND_NO_GLAMOR
+# A725 tiled allocations corrupt gradients with Mesa 26.2.5.
+# Keep GPU rendering, using the validated linear allocation path.
+export FD_MESA_DEBUG=notile
+export KWIN_COMPOSE=O2
+export KWIN_DRM_DEVICES=/dev/dri/card0
+export QT_QUICK_BACKEND=rhi
+export QSG_RHI_BACKEND=opengl
+exec /usr/lib/plasma-dbus-run-session-if-needed /usr/bin/startplasmamobile
+EOF
+chmod 0755 /usr/local/libexec/sm7475-plasma-mobile-gpu-session
+cat > /usr/share/wayland-sessions/sm7475-plasma-mobile-gpu.desktop <<'EOF'
+[Desktop Entry]
+Name=Plasma Mobile (SM7475 Adreno 725)
+Exec=/usr/local/libexec/sm7475-plasma-mobile-gpu-session
+TryExec=/usr/bin/startplasmamobile
+Type=Application
+DesktopNames=KDE
+EOF
+cat > /etc/sddm.conf.d/60-sm7475-gpu.conf <<'EOF'
+[Autologin]
+Session=sm7475-plasma-mobile-gpu.desktop
+EOF
+cat > /usr/local/libexec/sm7475-restore-software-plasma <<'EOF'
+#!/bin/sh
+set -eu
+# Emptying the override restores 50-sm7475-mobile.conf's software session.
+: > /etc/sddm.conf.d/60-sm7475-gpu.conf
+systemctl restart sddm
+EOF
+chmod 0755 /usr/local/libexec/sm7475-restore-software-plasma
+echo 'Hardware Plasma session selected; the running session has not been restarted.'
+echo 'Recovery over SSH/ACM: /usr/local/libexec/sm7475-restore-software-plasma'

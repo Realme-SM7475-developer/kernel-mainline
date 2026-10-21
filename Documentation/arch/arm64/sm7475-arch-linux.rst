@@ -543,3 +543,98 @@ and are not auto-loaded. The normal battery/desktop rollback remains
 ``out-battery-gauge-20261021``. Flash only a matching boot/vendor_boot/dtbo
 trio, then set slot a active and check retry/unbootable state before
 reboot. Do not format or reinstall userdata.
+
+Adreno 725 hardware rendering
+----------------------------
+
+The SM7475 GPU is advertised by this phone's stock DT as Adreno725v1,
+chip ID ``0x07030002``. The stock ``gen7_4_0`` description shares the A730
+clock-gating/protection tables, SQE/GMU firmware and 2 MiB GMEM. The GPU
+catalog now recognizes that real revision. The board describes its GPU,
+GMU, Cape-compatible GPUCC and independent Adreno SMMU, with the seven
+stock 220--580 MHz OPPs. GPUCC is built in; display and touch parameters
+are unchanged. The marble tree was used as a reference, together with
+this phone's stock sources and DT.
+
+Two existing A7xx initialization faults required fixes:
+
+* With the LLCC node disabled, slice lookup discarded the valid CX_MISC
+  mapping. GMU resume then dereferenced ``ERR_PTR(-EINVAL)`` while reading
+  TCM retention. A7xx now retains this mapping independently of LLCC and
+  rejects actual mapping failures during probe.
+* A730 has no IFPC-only register list. The power-up list builder now
+  checks for that optional list and sets its length to zero when absent.
+
+Firmware is taken from this phone's read-only ``super/vendor_a`` image.
+Do not use firmware signed for a different device. Install the extracted
+files as root::
+
+  install -Dm644 /path/to/stock/firmware/a730_sqe.fw \
+    /usr/lib/firmware/qcom/a730_sqe.fw
+  install -Dm644 /path/to/stock/firmware/gmu_gen70000.bin \
+    /usr/lib/firmware/qcom/gmu_gen70000.bin
+  install -Dm644 /path/to/stock/firmware/a730_zap.elf \
+    /usr/lib/firmware/qcom/sm7475/realme/gt-neo5-se/a730_zap.mbn
+  sync
+
+The last command deliberately installs the **stock .elf** under the DT's
+monolithic ``.mbn`` filename. Its header and hash match the stock split
+``.mdt/.b01/.b02`` image. The separate stock file named ``a730_zap.mbn``
+has different authentication metadata and was rejected by PAS with -22.
+The accepted ELF SHA256 is
+``3daf6095cacd7eabfaa14b7be7ef0b89d3f9a1dc057ec5df80b417727330d5eb``.
+No signature or firmware partition is modified; firmware is not included
+in this repository.
+
+Install ``mesa-utils`` and optionally ``vulkan-tools vulkan-freedreno``.
+After configuring the existing software Plasma session, copy
+``tools/boot/sm7475-arch/setup-plasma-mobile-gpu`` onto the phone and run it
+as root. It checks that GBM/EGL reports FD725, adds a hardware session and
+selects it for SDDM. It does not restart the running desktop. Use a timed
+recovery before the first switch::
+
+  systemd-run --unit=sm7475-gpu-desktop-rollback --on-active=180s \
+    /usr/local/libexec/sm7475-restore-software-plasma
+  systemctl stop sddm
+  loginctl terminate-user alarm
+  systemctl start sddm
+
+Terminating the old graphical user session prevents a lingering KWin from
+retaining the previous rendering environment. This logs out that user.
+After verifying the screen, cancel the timer and retain graphical boot::
+
+  systemctl stop sm7475-gpu-desktop-rollback.timer
+  systemctl set-default graphical.target
+
+Recovery over SSH/ACM is
+``/usr/local/libexec/sm7475-restore-software-plasma``. The original software
+session and Xfce recovery remain available.
+
+The hardware session currently sets ``FD_MESA_DEBUG=notile``. This is a
+required rendering workaround: default and ``noubwc`` allocations corrupted
+a 1024x1024 coordinate gradient, while linear allocations passed. A plain
+64x64 color/constant-shader test alone did not reveal this. Native
+Freedreno and Zink/Turnip both showed the default tiled-image error;
+changing the reported GMEM base or the NC macrotile mode did not fix it.
+Those diagnostic overrides were removed. Tiled rendering remains an open
+issue, and Vulkan device enumeration does not establish correct Vulkan
+rendering. Do not remove the linear-allocation workaround based only on
+an EGL renderer string or a uniform-color test.
+
+With the workaround, KWin reports DRM/EGL, ``freedreno`` and ``FD725``.
+OpenGL 4.6 and OpenGL ES 3.2 are exposed by Mesa 26.2.5. Five clear colors,
+128 small shader frames, three 1024x1024 constant-color shader frames and
+the coordinate-gradient comparison were checked by pixel readback. The
+hardware desktop screenshot is clean with linear allocations. Turnip
+reports Adreno 725 and Vulkan 1.4, but default tiled rendering is not yet
+validated as usable. Evidence and firmware hashes are under the project's
+``archlinuxarm/gpu/`` directory. The verified built-in touch image trio in
+``out-touch-release-20261021`` is the display/touch rollback.
+
+A normal ``systemctl reboot`` retained automatic GPU desktop login and
+the linear-allocation setting. GMU 4.0.7 started without authentication
+errors, Oops or GPU faults; the pre-existing single early MDSS fault
+remained. The large gradient passed again after reboot. No diagnostic
+module or preload library was loaded. Systemd was ``running`` with zero
+failed units. The user confirmed the app drawer, application interaction,
+physical screen and touch were normal after reboot.
