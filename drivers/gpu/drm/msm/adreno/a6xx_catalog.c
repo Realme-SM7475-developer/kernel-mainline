@@ -1441,7 +1441,8 @@ static const struct adreno_info a7xx_gpus[] = {
 			{ 142, 3 },
 		),
 	}, {
-		.chip_ids = ADRENO_CHIP_IDS(0x07030001),
+		/* A730 and the Cape revision sold as A725 share this setup. */
+		.chip_ids = ADRENO_CHIP_IDS(0x07030001, 0x07030002),
 		.family = ADRENO_7XX_GEN1,
 		.fw = {
 			[ADRENO_FW_SQE] = "a730_sqe.fw",

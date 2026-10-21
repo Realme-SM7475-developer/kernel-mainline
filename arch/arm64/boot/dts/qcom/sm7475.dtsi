@@ -257,7 +257,7 @@
 			no-map;
 			reg = <0x00 0x8b910000 0x00 0xa000>;
 		};
-		gpu_microcode_region@8b91a000 {
+		mainline_gpu_microcode: gpu_microcode_region@8b91a000 {
 			no-map;
 			reg = <0x00 0x8b91a000 0x00 0x2000>;
 		};
