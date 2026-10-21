@@ -287,6 +287,78 @@ DMA0 produces the same framebuffer SHA256 and the same two abnormal mixer
 signatures as VIG0. This prioritizes their shared memory-fetch path over
 a fault specific to one SSPP type.
 
+A temporary module's attempt to enumerate all 128 SMMU stream-match
+registers aborts at SMR[113] (physical 0x150009c4), before changing scanout
+or translation. The USB shell survives, but the module remains in Loading
+state and requires a forced reboot to clear it. Do not enumerate that
+register range; restrict any subsequent check to the already captured,
+readable entries and the display-owned context.
+
+After a clean reboot, a restricted one-shot comparison allocates a
+cache-cleaned 128 KiB DMA32 buffer at physical 0xb7800000 and maps it at
+IOVA 0x20000000. Source and pixel-extension geometry are limited to 24
+white rows, so both translated and physical accesses remain in that
+allocation. Constant colour gives 0x3f90720c on both mixers. Normal
+translation gives 0x4991cc74/0x27864040; disabling SCTLR.M only in the
+display-owned context and using the physical address gives the same
+abnormal pair. This does not support a simple scanout page-mapping error
+as the cause. The original context control, source address and geometry
+are restored, a new frame is confirmed, and the buffer is unmapped and
+freed before the module is removed.
+
+Read-only VBIF checks show no pending/source errors, memory-type values
+0x33333333/0x00333333 matching the stock device-tree entries, and no client
+halt request. The MDP core clock is already 500 MHz.
+
+Holding DMA0's clock on, using the captured stock CREQ LUT or requesting
+the maximum CREQ priority does not change the full-white memory
+signatures. These settings and the original framebuffer are restored.
+Black memory and constant black both give zero signatures; grey, white,
+green and blue memory comparisons differ from their constant-colour
+controls. Treat these as hardware observations, rather than a decoded
+image or a proof that every colour component is represented in the MISR.
+
+A separate temporary geometry probe compares constant white with the
+same owned white buffer. The memory signatures for 1x1, 16x1 and 64x1
+are zero, while constant colour gives a nonzero left signature. Wider
+rectangles give differing nonzero memory signatures. A 5120-byte stride
+also fails the 1240x24 comparison. Original geometry, stride and source
+address are restored and the mapping/module are removed afterwards.
+
+Correlated 256-byte read failures, 2026-10-21
+------------------------------------------
+
+A standard atomic writeback test uses the otherwise inactive CRTC 90,
+primary plane 47 and writeback connector 36. TEST_ONLY passes before the
+real commit. Its input is a completely white 640x64 XRGB8888 dumb buffer,
+with a 2560-byte pitch. The writeback fence signals and all 163840 output
+bytes are read back. Each row contains exactly 320 opaque black pixels
+and 320 white pixels, alternating in runs of 64 pixels. Across the entire
+output, byte offsets with bit 8 clear contain pixels 0xff000000; those
+with bit 8 set contain 0xffffffff. There are no other pixel values. The
+black pixels' written alpha distinguishes them from untouched zeroed
+output memory. This reproduces the symptom without DSI or panel DSC.
+Writeback is disabled afterwards and live DRM state confirms that the
+original display remains on CRTC 89/DMA0, with CRTC 90 and its plane free.
+
+A separate command test places the identical eight-byte embedded DCS
+brightness packet at offsets 0, 0x80, 0x100, 0x180, 0x200 and 0x300 within
+one cache-cleaned DMA32 page. The page is mapped at IOVA 0x30000000.
+Each pass resets brightness through the working FIFO before trying
+memory DMA, then checks the result through FIFO. Offsets 0, 0x80 and
+0x200 leave readback at 8192. Offsets 0x100, 0x180 and 0x300 change it to
+4096, matching successful transmission. Every pass reports DMA complete,
+not busy, with no ACK error. Brightness is restored to 2048 (FIFO readback
+8192), original DMA/interrupt settings are restored and the test mapping,
+page and module are removed.
+
+These two independent observations correlate scanout corruption and the
+previous command-DMA failure with address bit 8. This is a shared-read-path
+diagnostic result, not a verified cause or a workaround suitable for the
+driver. A command-buffer offset alone cannot repair arbitrary scanout
+data. The known ten-bit diagnostic images are retained while collecting
+a targeted stock bus/cache configuration comparison.
+
 Build and recovery
 ==================
 
