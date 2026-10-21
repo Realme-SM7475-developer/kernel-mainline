@@ -468,6 +468,35 @@ black. The first white writeback is uniform, but a repeat is all black.
 Do not treat that first result as proof that skipping reset fixes reads.
 This experiment is rejected and the previous three images, including the
 normal MDSS reset, are restored. The repository DT retains that reset.
+The user confirms that the rollback restores the previous black-background
+text display; the original missing strokes remain unresolved.
+
+Full-page command and physical-address controls
+----------------------------------------------
+
+A further bounded command test fills every eight-byte location of an
+owned write-combined page with a valid brightness packet before starting
+any DMA. It checks all packet words through the CPU, then sends eight
+bytes from offsets 0, 0x80, 0x100, 0x180, 0x200, 0x300, 0xe00, 0xf00 and
+0xff8. A uniform-packet pass still fails at all tested bit-8-clear offsets
+and succeeds at all tested bit-8-set offsets. Filling the surrounding
+memory therefore does not rescue the failed offsets.
+
+A second pass gives each 256-byte block a distinct brightness value.
+Successful offsets execute their own block's value, including the last
+packet in the page; failed offsets leave the FIFO-established brightness
+unchanged. These results do not support a simple in-page address alias.
+Both passes use DMA32 physical pages, at 0xb7800000 and 0xb7801000.
+
+Repeating the distinct-packet pass with a 36-bit direct-DMA allocation
+obtains physical page 0x804a97000, mapped to the same IOVA 0x30000000.
+It gives the same offset-dependent results, so the observation is not
+limited to the tested low physical-memory pages. All 27 commands complete
+with IRQ 1, status 0 and ACK 0. Brightness is restored to 2048, with FIFO
+readback 8192; DMA/interrupt settings are restored and all temporary
+allocations, mappings and modules are released. USB remains available
+with no new context fault, Oops or external abort. These are diagnostic
+controls, not a verified repair or proof of a particular failed AXI port.
 
 Build and recovery
 ==================
