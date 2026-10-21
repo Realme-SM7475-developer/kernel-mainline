@@ -636,7 +636,20 @@ the earlier no-reset experiment remains rejected.
 The normal board config now selects the already validated panel handoff
 and dynamic plane allocation. LLCC remains disabled in the source DT, as
 before; the first successful image used the archived LLCC diagnostic DTB.
-Evidence is in ``out/display-evidence/stock-llcc-20261021/clocked-reset-*``.
+The final default kernel, 2026-10-21 14:27:13, is flashed to slot a with its
+matching boot/vendor_boot/dtbo set. Boot confirms the automatic four-clock
+reset sequence, absence of the temporary reset parameter, disabled LLCC
+and successful panel handoff. The user again confirms normal text with no
+lines or missing strokes. All eighteen distinct DMA32/36-bit commands and
+both normal-driver brightness modes pass. The hardware writeback chain
+again gives identical all-white middle/output buffers, 64 matching rows
+and successful fences. No diagnostic modules remain loaded and brightness
+is restored to 2048, with FIFO enabled. The fix does not require enabling
+the diagnostic LLCC node. The archived default images are in
+``out-display-fix-20261021`` and also copied to the standard ``out`` folder.
+Evidence is in ``out/display-evidence/stock-llcc-20261021/clocked-reset-*``
+and ``display-fix-*``. The separate repeated-writeback timeout remains
+unresolved; normal text and the original striped-read defect are fixed.
 
 Build and recovery
 ==================

@@ -355,7 +355,7 @@ static int msm_mdss_reset(struct device *dev)
 	}
 
 	/*
-	 * On SM7475, resetting with these clocks gated leaves display read
+	 * On SM7475, resetting before clock preparation leaves display read
 	 * path 0 returning incorrect data. Keep both AXI clocks, AHB and MDP
 	 * running through the reset. ABL replaces board compatibles with Ukee.
 	 */
