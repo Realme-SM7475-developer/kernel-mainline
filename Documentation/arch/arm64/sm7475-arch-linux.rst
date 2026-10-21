@@ -469,117 +469,77 @@ units, the userdata root, SDDM, UPower, SSH and the ADSP startup service.
 The battery still truthfully reported discharging. This change fixes
 refresh latency; it does not claim to enable battery charging.
 
-S3910 touchscreen bring-up
-=========================
+S3910 touchscreen
+=================
 
-The Senna stock DT and working Android logs identify a Synaptics S3910
-on QUP0 SE4 SPI at 0x990000, using GPIO16-19, mode 0 and up to 12 MHz.
-GPIO20 is active-low reset and GPIO21 is a level-low interrupt. VDD is
-PM8350C L3 at 3.008 V; VDDIO is PM8450 L4 at 1.8 V, gated by GPIO97
-driven high. The stock driver ignores the active-low flag on its legacy
-enable1v8_gpio property and explicitly writes a physical high level.
+The S3910 touchscreen is built in and initializes automatically before
+userspace. Plasma Mobile taps, swipes and two-finger contacts work after
+reboot. The committed configuration selects GENI SPI and
+``TOUCHSCREEN_SYNAPTICS_S3910=y``; no module installation or startup
+service is needed.
 
-``synaptics-s3910`` implements SPI TouchComm v1 with heap-backed transfer
-buffers, 0xff read dummy bytes, bounded continuation reads and command
-responses, and slot-based multitouch. It reads the coordinate limits and
-contact count from application information. The configured RAM report
-contains an object count followed by eight bytes per active object.
-Suspend asserts reset and disables the supplies; resume reinitializes
-the application report format before enabling interrupts.
+The Senna stock DT and Android logs identify the controller on QUP0 SE4
+SPI at 0x990000, GPIO16-19, mode 0 and up to 12 MHz. GPIO20 is active-low
+reset and GPIO21 is a level-low interrupt. VDD is PM8350C L3 at 3.008 V;
+VDDIO is PM8450 L4 at 1.8 V, gated by GPIO97 driven high. The vendor driver
+ignores the active-low flag on its legacy enable1v8_gpio property and
+explicitly drives a physical high level.
 
-Stock logs show application build 4284627 already installed on this
-phone and no firmware update needed. This driver uses that existing
-application and contains no flash erase/write/commit implementation.
-Bootloader/host-download firmware modes fail probe with an error instead
-of initiating a firmware download.
+Three pieces are needed in addition to the SPI controller node:
 
-The private board nodes avoid the stock overlay's touch placeholders.
-The unused stock camera ``/soc/gpio-regulator@0`` is predeclared disabled
-because its GPIO97 request conflicts with the touch power gate. The
-factory overlay does not set its status, so the disabled state survives
-the merge. Revisit this conflict when adapting cameras.
+* ``synaptics-s3910`` implements SPI TouchComm v1 using the on-device
+  application firmware. It uses heap-backed transfer buffers, 0xff read
+  dummy bytes, bounded continuation reads and command responses, and
+  slot-based multitouch. Limits and contact count come from application
+  information. The RAM report has an object count followed by eight bytes
+  per active object. There is no firmware erase/write/commit operation.
+* Cape's GPIO function must use ``MSM_GPIO_PIN_FUNCTION(gpio)``. Without
+  the GPIO function flag, generic pinmux rejects the touch regulator's
+  own GPIO97 request after selecting its GPIO pinctrl state. The unused
+  stock camera ``/soc/gpio-regulator@0`` is disabled to avoid a separate
+  GPIO97 conflict; revisit that shared pin when adapting cameras.
+* QUP0 needs SMMU stream 0x5a3 for payload DMA. GPI0 uses the separate
+  stream 0x5b6 for its rings. Both values match this phone's stock DT and
+  SM8450. GENI SPI maps buffers through the QUP wrapper device. Without
+  its mapping, the first nine-byte SPI read failed to return and the
+  device restarted. Adding it enabled both the startup and continuation
+  reads. The original GENI SPI driver is retained without diagnostic
+  changes.
 
-Build validation, 2026-10-21: driver compilation and checkpatch passed,
-with no checkpatch warnings. Configuration differs from the normal
-battery/desktop version only by enabling GENI SPI built-in and the new
-S3910 driver. The three candidate images passed AVB, SHA256, embedded
-kernel/DTB and unchanged userdata-bootstrap checks. All three factory
-DTBO entries remain byte-identical. Offline merging without the stock
-overlay's stale symbol exports preserved the disabled camera regulator;
-the actual flash images retain those exports. Full dt-schema validation
-has not been run.
+Hardware validation, 2026-10-21: the application identifies as
+S3910PA0B0-15.2, build 4284627, with coordinates 0..12399 / 0..27719,
+ten slots and a 128-byte report configuration. Udev reports
+``ID_INPUT_TOUCHSCREEN=1``. The user confirmed normal Plasma taps and
+swipes; evdev captured 937 frames, two simultaneous contacts and 35
+complete release frames, with all coordinates in range, during the
+initial module test. A user-initiated reboot during capture was recorded
+as manual, and the same module worked again after that reboot.
 
-The replacement images are in ``out-touch-gpio-fixed-20261021``; the
-initial supply-failure build remains ``out-touch-20261021``. The normal
-desktop rollback remains ``out-battery-gauge-20261021``. Evidence and
-the image validator are in ``archlinuxarm/touch/``. Hardware validation
-of the first build found a pinctrl integration issue: Cape's GPIO
-function lacked the GPIO function flag expected by the generic pinmux
-core. Selecting a GPIO pinctrl state then requesting the same pin via
-gpiolib failed, including the touch regulator's own GPIO97 request.
-Use ``MSM_GPIO_PIN_FUNCTION(gpio)`` as on the upstream SM8450 driver.
-The first boot retained normal Arch services, but touch probe deferred
-because this regulator failed. Touch events remain unverified in the
-replacement build: require application identification, a registered input
-device, real contact/release events and usable Plasma taps/swipes before
-claiming the touchscreen works. Flash only the matching a-slot
-boot/vendor_boot/dtbo trio; do not format or reinstall userdata.
+The final built-in kernel is 6.18.0 #5, built on 2026-10-21 at 20:55:19
+CST. Its initial boot registered the touchscreen at 0.735 seconds. An
+agent-requested normal systemctl reboot registered it again at 0.656
+seconds, without any module load command; the user confirmed touch
+operation after this reboot. Boot IDs were
+``d843b1c0-c764-4754-9bcf-5852ec2af63d`` and
+``f805639c-d6da-4233-90d1-9d45e9a8e4c2``. Systemd was running with no failed
+units; SDDM, UPower, SSH, networkd and ADSP startup were active. Real
+battery telemetry remained available. No touch packet errors, SPI
+timeouts or new QUP/GPI SMMU faults were observed. The known single early
+MDSS stream 0x2800 fault remains with normal display.
 
-The GPIO-flag build subsequently left the phone in fastboot with slot a
-reported as unbootable and its retry count at zero. This does not locate
-the failed boot stage. Restoring the verified battery/desktop trio and
-then setting slot a active reset retries to seven and cleared unbootable.
-The normal system booted again with working USB, SSH, SDDM and UPower.
-Neither pstore nor the persistent journal contained a boot record from
-the GPIO-flag build. Do not treat this as a confirmed touchscreen probe
-crash, or the source change as hardware-validated.
+The matching a-slot images are ``out-touch-release-20261021``. Their AVB,
+SHA256, embedded kernel/DTB and unchanged userdata-bootstrap checks
+passed. The release DTB is byte-identical to the working module-test DTB.
+Only the touchscreen configuration changes from module to built-in.
+Driver checkpatch passed without errors or warnings. The binding YAML
+was parsed, but full dt-schema validation and system suspend/resume
+validation have not been performed.
 
-The next diagnostic build, ``out-touch-module-20261021``, keeps the same
-DTB and GPIO fix but overrides only ``TOUCHSCREEN_SYNAPTICS_S3910=m`` in
-the build configuration. The committed board fragment still selects y.
-The module is staged outside the module search path at
-``/root/sm7475-touch-test/synaptics-s3910.ko`` and is not auto-loaded.
-First establish a working system and USB connection, then load it
-manually while collecting logs. The image, payload, unchanged bootstrap
-and module hashes are recorded in
-``archlinuxarm/touch/module-image-validation.json``. After flashing,
-set slot a active and verify its retry/unbootable state before reboot.
-
-The module-only kernel booted with working USB, SSH, SDDM and battery
-telemetry. GPIO97 no longer failed registration. After an unexpected
-restart, separate temporary probe stages verified module registration,
-GPIO/supply acquisition, spi_setup, and the complete power/reset sequence.
-The first nine-byte SPI read then failed to return and the phone
-restarted. The user reported no manual reset or cable operation. The
-temporary GENI driver reported SPI protocol 1, FIFO disabled, a 16-entry
-32-bit FIFO, and GPI DMA operation. Diagnostic modules were not installed
-for auto-loading, and the original GENI driver was restored afterward.
-
-The stock QUP0 wrapper declares SMMU stream 0x5a3; GPI0 separately declares
-0x5b6. These also match the upstream SM8450 tree used by marble. GENI SPI
-maps message buffers through its wrapper device, whose iommus property
-was missing here. Add the wrapper's 0x5a3 mapping without changing the
-GPI ring mapping. The next diagnostic images, ``out-touch-smmu-20261021``,
-have the same kernel and module bytes as the module-only build and a DTB
-with the wrapper mapping. AVB and payload checks passed. The wrapper
-joined IOMMU group 1, and both the nine-byte startup read and its
-continuation completed successfully without a restart.
-
-The original S3910 module then identified application S3910PA0B0-15.2,
-build 4284627, coordinates 0..12399 / 0..27719, ten slots and a 128-byte
-report configuration. Udev classified the device as a touchscreen and
-the user confirmed normal Plasma taps and swipes. Evdev captured 937
-frames, up to two simultaneous contacts and 35 complete release frames;
-all recorded coordinates were in range. There were no touch read errors,
-SPI timeouts or new QUP/GPI SMMU faults. The known early MDSS stream
-0x2c00 fault remains. Systemd reported running with no failed units,
-with SDDM, UPower and SSH active and real battery telemetry retained.
-
-The user manually rebooted during event capture. The diagnostic kernel
-requires a manual module load after reboot; loading the same module
-again restored the input device successfully. This restart must not be
-classified as a driver crash. A default built-in release is prepared in
-``out-touch-release-20261021`` with the same DTB and unchanged userdata
-bootstrap. Its AVB, kernel/DTB payload and configuration checks passed;
-automatic initialization and a normal reboot test are still pending.
-The normal battery/desktop images remain available for recovery.
+Evidence is in ``archlinuxarm/touch/``: ``release-image-validation.json``,
+``flash-release.txt``, ``release-first-boot.txt``, ``release-reboot.txt``,
+``release-reboot-events.jsonl`` and ``release-event-summary.json``.
+Temporary diagnostic modules are kept outside the module search path
+and are not auto-loaded. The normal battery/desktop rollback remains
+``out-battery-gauge-20261021``. Flash only a matching boot/vendor_boot/dtbo
+trio, then set slot a active and check retry/unbootable state before
+reboot. Do not format or reinstall userdata.
