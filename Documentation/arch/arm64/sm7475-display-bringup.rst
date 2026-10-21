@@ -498,6 +498,71 @@ allocations, mappings and modules are released. USB remains available
 with no new context fault, Oops or external abort. These are diagnostic
 controls, not a verified repair or proof of a particular failed AXI port.
 
+Display read-port isolation
+--------------------------
+
+A read-only check bounds SMR enumeration to the hardware-reported 113
+groups. Both display SIDs, 0x2800 and 0x2c00, match only group 4
+(SMR 0x84022800, S2CR 3). There is no duplicate matching route. CB3
+CBAR/CBA2R are 0x1f300/1; TCR, TCR2 and the relevant MAIR0 match the
+stock context. Clearing CB3 ACTLR.CMTLB temporarily, between two original
+value controls, leaves the command-offset result unchanged. ACTLR 1 is
+restored afterwards.
+
+The stock vendor_boot's SM7475 DTB identifies the display TBUs at
+0x151f9000 and 0x151fd000, covering SID ranges 0x2800 and 0x2c00.
+Following the published driver's micro-idle sequence, setting only bits
+10/11 in APPS_SMMU_TBU_REG_ACCESS_REQ_NS obtains matching ACK bits.
+Holding both TBUs awake does not repair command DMA. Request and ACK
+return to their original zero values when the control is removed.
+Access to TBU local registers is performed only after this handshake.
+
+A bounded ECATS test maps one owned DMA32 page and checks IOVAs
+0x30000000 and 0x30000100 through each TBU. All four hardware translations
+return the expected physical byte addresses, with no context fault.
+For a page at 0xb7802000, the raw PAR values are 0x33000b7802000b82 and
+0x33000b7802100b82 on both TBUs. The initial diagnostic's match flag used
+an incorrect unshifted mask; the correct downstream decoding is
+FIELD_GET(GENMASK_ULL(47, 12), PAR), yielding the full physical byte address.
+A corrected repeat confirms all four matches. Halt, debug request, context
+control and wake settings are restored and the page/mapping are released.
+The subsequent command-DMA control still fails at bit-8-clear offsets.
+
+To identify the actual command path, a separate bounded control pauses
+one TBU for approximately one millisecond during each eight-byte DMA.
+Holding TBU0 stalls offset 0 (DSI STATUS 3, completion IRQ 0), while offset
+0x100 completes. Holding TBU1 does the reverse. After resuming the held
+TBU, every transfer completes with STATUS 0, IRQ 1 and ACK 0. Offset 0
+still fails the brightness check; offset 0x100 succeeds. Thus the failing
+command is associated with display read path 0/SID 0x2800, while the
+working command uses path 1/SID 0x2c00. This is stronger than inferring a
+port from address striping alone. It does not establish which component
+or configuration on path 0 causes the data failure.
+
+A normal HF interconnect request, separate from the existing virtual
+display HF requests, is also tested at peak 2500000 kB/s. The request is
+visible through MDP, MNOC HF, LLCC and EBI; pending sync-state constraints
+raise the displayed aggregate to INT_MAX. The DMA-offset failure remains.
+The request and overlay are removed and the original virtual path is
+refreshed. Forcing the VBIF core clock using the stock debug driver's
+CLKON bit 1 likewise does not repair the offsets; CLKON is restored to 0.
+All temporary modules are removed and brightness is restored. No new
+Oops, external abort or context fault is observed during these controls.
+
+A subsequent QoS reader contains an address-arithmetic error: MMSS base
+0x01740000 plus offset 0x16008 is incorrectly written as 0x17416008.
+That read causes an external abort after the TBU wake state has already
+been restored. The USB shell remains available; logs are saved and a forced
+reboot clears the incomplete module load. Do not classify this as a NoC
+permission failure. The corrected reader obtains bases from DT resources,
+checks resource bounds and adds offsets, rather than concatenating hex
+digits. The correct MMSS addresses 0x01756008/0x01756088 and GEM addresses
+0x19121008/0x19161008 all read successfully, each returning 0x00020008.
+The helper unloads normally. A corresponding stock 5.10.236 build uses
+the stock Clang r416183b, retains CFI and passes checks of all 19 import
+CRCs against the original ramdisk modules and the 1024-byte module layout.
+These are static compatibility checks; stock runtime validation is pending.
+
 Build and recovery
 ==================
 
