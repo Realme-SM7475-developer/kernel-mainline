@@ -1213,6 +1213,18 @@ config TOUCHSCREEN_RM_TS
 	  To compile this driver as a module, choose M here: the
 	  module will be called raydium_i2c_ts.
 
+config TOUCHSCREEN_SYNAPTICS_S3910
+	tristate "Synaptics S3910 SPI touchscreen"
+	depends on SPI
+	depends on GPIOLIB
+	help
+	  Say Y here for the Synaptics S3910 touchscreen using the SPI
+	  TouchComm v1 protocol. The controller must contain working application
+	  firmware; this driver does not erase or reflash the controller.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called synaptics-s3910.
+
 config TOUCHSCREEN_SILEAD
 	tristate "Silead I2C touchscreen"
 	depends on I2C

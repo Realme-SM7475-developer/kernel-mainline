@@ -468,3 +468,51 @@ controlled reboot. The new boot retained systemd running, zero failed
 units, the userdata root, SDDM, UPower, SSH and the ADSP startup service.
 The battery still truthfully reported discharging. This change fixes
 refresh latency; it does not claim to enable battery charging.
+
+S3910 touchscreen bring-up
+=========================
+
+The Senna stock DT and working Android logs identify a Synaptics S3910
+on QUP0 SE4 SPI at 0x990000, using GPIO16-19, mode 0 and up to 12 MHz.
+GPIO20 is active-low reset and GPIO21 is a level-low interrupt. VDD is
+PM8350C L3 at 3.008 V; VDDIO is PM8450 L4 at 1.8 V, gated by GPIO97
+driven high. The stock driver ignores the active-low flag on its legacy
+enable1v8_gpio property and explicitly writes a physical high level.
+
+``synaptics-s3910`` implements SPI TouchComm v1 with heap-backed transfer
+buffers, 0xff read dummy bytes, bounded continuation reads and command
+responses, and slot-based multitouch. It reads the coordinate limits and
+contact count from application information. The configured RAM report
+contains an object count followed by eight bytes per active object.
+Suspend asserts reset and disables the supplies; resume reinitializes
+the application report format before enabling interrupts.
+
+Stock logs show application build 4284627 already installed on this
+phone and no firmware update needed. This driver uses that existing
+application and contains no flash erase/write/commit implementation.
+Bootloader/host-download firmware modes fail probe with an error instead
+of initiating a firmware download.
+
+The private board nodes avoid the stock overlay's touch placeholders.
+The unused stock camera ``/soc/gpio-regulator@0`` is predeclared disabled
+because its GPIO97 request conflicts with the touch power gate. The
+factory overlay does not set its status, so the disabled state survives
+the merge. Revisit this conflict when adapting cameras.
+
+Build validation, 2026-10-21: driver compilation and checkpatch passed,
+with no checkpatch warnings. Configuration differs from the normal
+battery/desktop version only by enabling GENI SPI built-in and the new
+S3910 driver. The three candidate images passed AVB, SHA256, embedded
+kernel/DTB and unchanged userdata-bootstrap checks. All three factory
+DTBO entries remain byte-identical. Offline merging without the stock
+overlay's stale symbol exports preserved the disabled camera regulator;
+the actual flash images retain those exports. Full dt-schema validation
+has not been run.
+
+Candidate images are in ``out-touch-20261021`` and the verified normal
+desktop rollback remains ``out-battery-gauge-20261021``. Evidence and
+the image validator are in ``archlinuxarm/touch/``. Hardware validation
+is pending: require application identification, a registered input
+device, real contact/release events and usable Plasma taps/swipes before
+claiming the touchscreen works. Flash only the matching a-slot
+boot/vendor_boot/dtbo trio; do not format or reinstall userdata.

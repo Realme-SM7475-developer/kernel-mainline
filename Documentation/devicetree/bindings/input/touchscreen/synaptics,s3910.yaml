@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/input/touchscreen/synaptics,s3910.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Synaptics S3910 SPI touchscreen
+
+maintainers:
+  - Yukino <1475215798@qq.com>
+
+description: |
+  Synaptics S3910 touchscreen with on-device application firmware and the
+  TouchComm v1 SPI message protocol. Coordinate limits and contact count are
+  read from the application information returned by the controller.
+
+allOf:
+  - $ref: touchscreen.yaml#
+  - $ref: /schemas/spi/spi-peripheral-props.yaml#
+
+properties:
+  compatible:
+    const: synaptics,s3910
+
+  reg:
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  reset-gpios:
+    maxItems: 1
+
+  vdd-supply:
+    description: Analog power supply
+
+  vddio-supply:
+    description: Digital and I/O power supply
+
+  spi-max-frequency:
+    maximum: 12000000
+
+  touchscreen-size-x: true
+  touchscreen-size-y: true
+  touchscreen-inverted-x: true
+  touchscreen-inverted-y: true
+  touchscreen-swapped-x-y: true
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - reset-gpios
+  - vdd-supply
+  - vddio-supply
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/gpio/gpio.h>
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    spi {
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        touchscreen@0 {
+            compatible = "synaptics,s3910";
+            reg = <0>;
+            spi-max-frequency = <12000000>;
+            interrupt-parent = <&gpio>;
+            interrupts = <21 IRQ_TYPE_LEVEL_LOW>;
+            reset-gpios = <&gpio 20 GPIO_ACTIVE_LOW>;
+            vdd-supply = <&vdd>;
+            vddio-supply = <&vddio>;
+        };
+    };

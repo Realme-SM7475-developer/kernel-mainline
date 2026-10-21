@@ -16,6 +16,7 @@
 /* USB2 (DWC3 + HS PHY) for the gadget debug console; see the file. */
 #include "sm7475-realme-gt-neo5-se-usb.dtsi"
 #include "sm7475-realme-gt-neo5-se-battery.dtsi"
+#include "sm7475-realme-gt-neo5-se-touch.dtsi"
 
 / {
 	model = "realme GT Neo5 SE";
