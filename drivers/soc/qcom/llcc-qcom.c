@@ -1527,6 +1527,196 @@ static const struct llcc_slice_config sm7150_data[] =  {
 	},
 };
 
+/* Ukee slice table verified against the stock RMX3700 llcc-qcom module. */
+static const struct llcc_slice_config sm7475_data[] = {
+	{
+		.usecase_id = LLCC_CPUSS,
+		.slice_id = 1,
+		.max_cap = 1792,
+		.priority = 0,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+		.activate_on_init = true,
+	}, {
+		.usecase_id = LLCC_VIDSC0,
+		.slice_id = 2,
+		.max_cap = 512,
+		.priority = 3,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_AUDIO,
+		.slice_id = 6,
+		.max_cap = 1024,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+	}, {
+		.usecase_id = LLCC_MDMHPGRW,
+		.slice_id = 7,
+		.max_cap = 512,
+		.priority = 3,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_MODHW,
+		.slice_id = 9,
+		.max_cap = 1024,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_CMPT,
+		.slice_id = 10,
+		.max_cap = 4096,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_GPUHTW,
+		.slice_id = 11,
+		.max_cap = 256,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_GPU,
+		.slice_id = 12,
+		.max_cap = 1024,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+		.write_scid_en = true,
+	}, {
+		.usecase_id = LLCC_MMUHWT,
+		.slice_id = 13,
+		.max_cap = 256,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.activate_on_init = true,
+	}, {
+		.usecase_id = LLCC_DISP,
+		.slice_id = 16,
+		.max_cap = 2048,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_MDMPNG,
+		.slice_id = 21,
+		.max_cap = 1024,
+		.priority = 0,
+		.fixed_size = true,
+		.bonus_ways = 0xf0,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_AUDHW,
+		.slice_id = 22,
+		.max_cap = 1024,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+	}, {
+		.usecase_id = LLCC_CVP,
+		.slice_id = 28,
+		.max_cap = 256,
+		.priority = 3,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_MODPE,
+		.slice_id = 29,
+		.max_cap = 64,
+		.priority = 3,
+		.fixed_size = true,
+		.bonus_ways = 0xf0,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_APTCM,
+		.slice_id = 30,
+		.max_cap = 1024,
+		.priority = 3,
+		.fixed_size = true,
+		.res_ways = 0xf0,
+		.cache_mode = 1,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_WRCACHE,
+		.slice_id = 31,
+		.max_cap = 256,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.activate_on_init = true,
+	}, {
+		.usecase_id = LLCC_CVPFW,
+		.slice_id = 17,
+		.max_cap = 512,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_CPUSS1,
+		.slice_id = 3,
+		.max_cap = 1024,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_CAMEXP0,
+		.slice_id = 4,
+		.max_cap = 256,
+		.priority = 3,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_CPUMTE,
+		.slice_id = 23,
+		.max_cap = 256,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xf,
+		.activate_on_init = true,
+	}, {
+		.usecase_id = LLCC_CPUHWT,
+		.slice_id = 5,
+		.max_cap = 512,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+		.activate_on_init = true,
+	}, {
+		.usecase_id = LLCC_CAMEXP1,
+		.slice_id = 27,
+		.max_cap = 256,
+		.priority = 3,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+		.retain_on_pc = true,
+	}, {
+		.usecase_id = LLCC_AENPU,
+		.slice_id = 8,
+		.max_cap = 2048,
+		.priority = 1,
+		.fixed_size = true,
+		.bonus_ways = 0xff,
+	},
+};
+
 static const struct llcc_slice_config sm8150_data[] =  {
 	{
 		.usecase_id = LLCC_CPUSS,
@@ -3657,6 +3847,16 @@ static const struct qcom_llcc_config sm7150_cfg[] = {
 	},
 };
 
+static const struct qcom_llcc_config sm7475_cfg[] = {
+	{
+		.sct_data = sm7475_data,
+		.size = ARRAY_SIZE(sm7475_data),
+		.reg_offset = llcc_v2_1_reg_offset,
+		/* No EDAC access until the firmware permissions are established. */
+		.no_edac = true,
+	},
+};
+
 static const struct qcom_llcc_config sm8150_cfg[] = {
 	{
 		.sct_data       = sm8150_data,
@@ -3799,6 +3999,11 @@ static const struct qcom_sct_config sm6350_cfgs = {
 static const struct qcom_sct_config sm7150_cfgs = {
 	.llcc_config	= sm7150_cfg,
 	.num_config	= ARRAY_SIZE(sm7150_cfg),
+};
+
+static const struct qcom_sct_config sm7475_cfgs = {
+	.llcc_config = sm7475_cfg,
+	.num_config = ARRAY_SIZE(sm7475_cfg),
 };
 
 static const struct qcom_sct_config sm8150_cfgs = {
@@ -4583,6 +4788,7 @@ static const struct of_device_id qcom_llcc_of_match[] = {
 	{ .compatible = "qcom,sdm845-llcc", .data = &sdm845_cfgs },
 	{ .compatible = "qcom,sm6350-llcc", .data = &sm6350_cfgs },
 	{ .compatible = "qcom,sm7150-llcc", .data = &sm7150_cfgs },
+	{ .compatible = "qcom,sm7475-llcc", .data = &sm7475_cfgs },
 	{ .compatible = "qcom,sm8150-llcc", .data = &sm8150_cfgs },
 	{ .compatible = "qcom,sm8250-llcc", .data = &sm8250_cfgs },
 	{ .compatible = "qcom,sm8350-llcc", .data = &sm8350_cfgs },

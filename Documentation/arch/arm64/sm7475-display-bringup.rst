@@ -359,6 +359,77 @@ driver. A command-buffer offset alone cannot repair arbitrary scanout
 data. The known ten-bit diagnostic images are retained while collecting
 a targeted stock bus/cache configuration comparison.
 
+Stock bus comparison, 2026-10-21
+-------------------------------
+
+The targeted stock capture keeps the display awake and disables command
+encoder idle collapse while reading. HF/SF AXI clock gates both read 0x111
+when the display is actually awake; earlier 0x80000110 readings were taken
+after sleep and must not be used as the active comparison. Stock and
+mainline MDSS UBWC controls agree at 0x103e/2/1. Captured VBIF memory types,
+limits, error status and halt state do not identify a missing setting.
+
+Stock APPS SMMU CR0/ACR read 0x00e30406/0x1c, compared with mainline
+0x00230406/0x51c. A guarded temporary module compares the CR0 SHCFG change,
+clearing ACR bits 0x500, and both together. None changes which DSI packet
+offsets succeed. The ACR-only writeback still gives alternating 256-byte
+black/white runs. With SHCFG changed, writeback becomes entirely opaque
+black; restoring both registers restores the original alternating result.
+This is a diagnostic side effect, not an improvement. All controls and
+modules are restored or removed before further experiments.
+
+The published Realme Ukee LLCC driver contains a different slice table
+from SM8450. There is currently no LLCC device bound in this mainline DT.
+A read-only probe obtains LLCC HW_INFO 0x03010000 and STATUS0 0x40400501.
+CPU slice 1 and display slice 16 status both read 2; their ATTR0/ATTR1
+registers are zero. These observations alone do not prove the cause.
+
+The same probe then aborts at LLCC FEAC address 0x19241030. Do not read
+that address or enumerate the surrounding range: a source-code register
+definition is not evidence that current firmware permits the access.
+The probe made no MMIO writes. A forced reboot clears its incomplete
+Loading state, with the USB shell and ten-bit panel handoff verified again.
+Further LLCC comparisons must be limited to the registers already read
+successfully, and must establish stock state before proposing changes.
+
+The stock vendor LLCC perfmon module binds successfully, but reading its
+``perfmon_scid_status`` attribute disconnects USB before producing any
+slice data. The user reboots Android; ADB returns and the temporary module
+is gone. Pstore and /proc/last_kmsg provide no crash record, so the failing
+address and exact reason remain unconfirmed. Do not repeat that interface
+or infer a specific inaccessible bank from the disconnect.
+
+The stock vendor_boot ramdisk contains the actual llcc-qcom module. Its
+23-entry Ukee table is extracted offline and matches every initialized
+field in Realme's published driver. New SM7475 LLCC support uses this table,
+not SM8450's larger way masks and capacities. The DT declares the four
+stock bank windows and broadcast window, but keeps the device disabled by
+default. EDAC is deliberately not registered during this initial bring-up;
+its register permissions have not been established. Only a separately
+packaged diagnostic DTB enables the node. The 2026-10-21 12:15:17 kernel
+boots with the node enabled and the qcom-llcc driver bound. The compiled
+23-entry table matches all 22 initialized fields per entry in the stock
+binary. Full build, DT binding documentation validation, LLCC-node schema
+validation, AVB and kernel/DTB/USB-shell payload checks pass. The node schema
+check also emits an existing nvmem-cells type-definition warning.
+
+Writeback still produces 320 black and 320 white pixels per row; DSI still
+succeeds only at offsets 0x100, 0x180 and 0x300. LLCC configuration alone is
+therefore not a display fix. Both DMA0 and DMA1 SYS_CACHE_MODE already read
+0x10, matching the captured stock no-allocation setting.
+
+A further temporary command probe allocates a write-combined page through
+``dma_alloc_wc`` on a private device using direct DMA32, then maps the owned
+page into the display IOMMU domain. CPU packet readback is checked before
+transmission. It reproduces the same offset-dependent successes and
+failures as the manually cache-cleaned page. Original DMA/IRQ settings and
+brightness are restored, and the page, mapping, device and module are
+released. This does not support a fix consisting only of changing the CPU
+buffer allocation or its cache-clean loop.
+
+Source provenance:
+https://github.com/realme-kernel-opensource/realme_GTNeo5SE-AndroidB-kernel-source/blob/master/drivers/soc/qcom/llcc_qcom.c
+
 Build and recovery
 ==================
 

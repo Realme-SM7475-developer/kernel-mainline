@@ -496,6 +496,19 @@
 			qcom,bcm-voters = <&mainline_apps_bcm_voter>;
 		};
 
+		/* Ukee bank windows follow the stock LLCC v2.1 description. */
+		mainline_llcc: cache-controller@19200000 {
+			compatible = "qcom,sm7475-llcc";
+			reg = <0x19200000 0x80000>,
+			      <0x19600000 0x80000>,
+			      <0x19300000 0x80000>,
+			      <0x19700000 0x80000>,
+			      <0x19a00000 0x80000>;
+			reg-names = "llcc0_base", "llcc1_base", "llcc2_base",
+				    "llcc3_base", "llcc_broadcast_base";
+			status = "disabled";
+		};
+
 		/* Cape uses the SM8450 display register layout. */
 		mdss: display-subsystem@ae00000 {
 			compatible = "qcom,sm8450-mdss";
