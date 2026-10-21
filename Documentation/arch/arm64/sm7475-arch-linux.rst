@@ -524,3 +524,23 @@ replacement build: require application identification, a registered input
 device, real contact/release events and usable Plasma taps/swipes before
 claiming the touchscreen works. Flash only the matching a-slot
 boot/vendor_boot/dtbo trio; do not format or reinstall userdata.
+
+The GPIO-flag build subsequently left the phone in fastboot with slot a
+reported as unbootable and its retry count at zero. This does not locate
+the failed boot stage. Restoring the verified battery/desktop trio and
+then setting slot a active reset retries to seven and cleared unbootable.
+The normal system booted again with working USB, SSH, SDDM and UPower.
+Neither pstore nor the persistent journal contained a boot record from
+the GPIO-flag build. Do not treat this as a confirmed touchscreen probe
+crash, or the source change as hardware-validated.
+
+The next diagnostic build, ``out-touch-module-20261021``, keeps the same
+DTB and GPIO fix but overrides only ``TOUCHSCREEN_SYNAPTICS_S3910=m`` in
+the build configuration. The committed board fragment still selects y.
+The module is staged outside the module search path at
+``/root/sm7475-touch-test/synaptics-s3910.ko`` and is not auto-loaded.
+First establish a working system and USB connection, then load it
+manually while collecting logs. The image, payload, unchanged bootstrap
+and module hashes are recorded in
+``archlinuxarm/touch/module-image-validation.json``. After flashing,
+set slot a active and verify its retry/unbootable state before reboot.
