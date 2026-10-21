@@ -739,3 +739,66 @@ automatically on FD725 with compressed scanout; systemd was running with
 zero failed units. Touch initialized at 0.557 seconds. No GPU timeout,
 authentication error or Oops was observed. The kernel, boot partitions
 and normal GPU session settings were not changed by this test run.
+
+Physical power and volume keys
+------------------------------
+
+This board's factory overlay places ``KEY_POWER`` and ``KEY_VOLUMEUP``
+under PMK8350 ``pon_hlos@1300`` as ``pwrkey`` and ``resin``. They use
+SPMI interrupts 0/0x13/7 and 0/0x13/6, respectively, with both edges.
+Volume down is a separate ``gpio-keys`` input on PMIC GPIO6. The disabled
+``vol_up`` GPIO node references that same GPIO6; enabling it would not
+supply the missing physical volume-up key. Do not copy marble's resin
+key code: that board uses it for volume down, while this phone uses
+volume up.
+
+The missing keys were caused by ``CONFIG_POWER_RESET_QCOM_PON=m`` with
+no matching modules installed on the persistent Arch root. The PON
+parent remained unbound and therefore never populated its key children,
+even though ``CONFIG_INPUT_PM8941_PWRKEY=y`` was already enabled. Only
+the independent volume-down device appeared in the input list.
+
+Loading an unmodified qcom-pon module built against the running kernel
+immediately registered ``pmic_pwrkey`` and ``pmic_resin``. Event capture
+recorded 18 complete power press/release pairs, 18 volume-up pairs and
+eight volume-down pairs, with no stuck key or repeat event. The desktop
+power action was temporarily inhibited during the first capture; a
+lack of screen response during that interval did not mean input was
+missing. After restoring PowerDevil and removing the temporary inhibitor,
+the user confirmed normal power-key screen off and on. Panel ID and
+power status remained normal during those display cycles.
+
+The release fragment now builds both the PON parent and its input driver
+in. The merged configuration changes only ``POWER_RESET_QCOM_PON`` from
+module to built-in. There is no new key driver or DT change. The existing
+factory PM8998-compatible parent is supported by the upstream PON driver;
+its PMK8350-compatible children select the Gen3 input implementation.
+No reset reason mapping or reboot-to-bootloader support was added.
+
+The matching ``out-keys-release-20261021`` boot/vendor_boot/dtbo images
+passed AVB and payload checks. The DTB and all parsed vendor_boot payload
+sections match the previously working GPU release byte for byte,
+including the userdata bootstrap. The previous GPU image trio remains
+the rollback. Evidence is in ``archlinuxarm/keys/``. Built-in release
+startup and ordinary-reboot results must be recorded separately from
+the manual module test above.
+
+The built-in kernel is 6.18.0 #1, built at 22:52:01 CST on 2026-10-21.
+On initial boot ``bb8923ad-5986-4c2f-a844-cd35baaf7378``, power and
+volume-up inputs registered at 0.443 and 0.444 seconds. An agent-requested
+ordinary reboot produced ``2db9cf14-77d9-47ac-b881-6a3cc8d909a4`` and the
+two inputs registered again at 0.447 and 0.448 seconds. No manual module
+load or userspace startup helper was needed; lsmod was empty. The power
+key's wakeup attribute was enabled. Systemd was running with zero failed
+units, S3910 initialized, and the native GPU gradient passed after reboot.
+Input event numbering changes with the earlier PMIC input registration;
+identify touchscreen and keys by device name/udev rather than a fixed
+event number.
+
+After the built-in reboot, event capture recorded two complete power
+press/release pairs, four volume-up pairs and four volume-down pairs,
+without repeats or missing releases. The user confirmed all three keys,
+normal screen off/on, and touch after screen-on. This is a separate
+confirmation from the earlier manual-module test. The finite capture
+ended naturally; temporary desktop inhibitors are gone and PowerDevil
+is restored. No diagnostic module is auto-loaded.
