@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Build an opt-in RAM-root Arch bootstrap using a signed AArch64 rootfs."""
+"""Build an opt-in Arch bootstrap using a signed AArch64 rootfs."""
 import argparse
 import gzip
 import hashlib
@@ -45,7 +45,12 @@ def main():
         parser.add_argument("--" + option, required=True, type=Path)
     parser.add_argument("--rootfs-url", default=(
         "http://192.168.77.1:8080/ArchLinuxARM-aarch64-latest.tar.gz"))
+    parser.add_argument("--root-partuuid", default="",
+                        help="Automatically boot an installed userdata root with this GPT UUID")
     args = parser.parse_args()
+    if args.root_partuuid and not re.fullmatch(
+            r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}", args.root_partuuid):
+        parser.error("root-partuuid must be a lowercase GPT UUID")
     key = args.ssh_public_key.read_text().strip()
     if not key.startswith("ssh-ed25519 ") or "\n" in key:
         parser.error("Supply a single Ed25519 public key, never a private key")
@@ -123,12 +128,13 @@ def main():
 
     add("bin/busybox", stat.S_IFREG | 0o755, args.busybox.read_bytes())
     for source, target in (("init", "init"), ("usb-network.sh", "bin/arch-usb-network"),
-                           ("arch-prepare", "bin/arch-prepare"), ("arch-boot", "bin/arch-boot")):
+                           ("arch-prepare", "bin/arch-prepare"), ("arch-boot", "bin/arch-boot"),
+                           ("arch-mount-userdata", "bin/arch-mount-userdata")):
         subprocess.run(["sh", "-n", str(HERE / source)], check=True)
         add(target, stat.S_IFREG | 0o755, (HERE / source).read_bytes())
     digest = sha256(args.rootfs)
     config = (f"ROOTFS_URL='{args.rootfs_url}'\nROOTFS_SHA256='{digest}'\n"
-              f"BUILD_EPOCH={int(time.time())}\n")
+              f"BUILD_EPOCH={int(time.time())}\nROOT_PARTUUID='{args.root_partuuid}'\n")
     add("etc/arch-bootstrap.conf", stat.S_IFREG | 0o644, config.encode())
     add("etc/arch-authorized-key", stat.S_IFREG | 0o600, (key + "\n").encode())
     for directory in ("dev", "proc", "sys", "run", "newroot", "tmp"):
@@ -142,7 +148,9 @@ def main():
         raise RuntimeError("Bootstrap exceeds the stock vendor ramdisk region")
     manifest = {"rootfs_sha256": digest, "rootfs_unpacked_bytes": unpacked_bytes,
                 "rootfs_signer": SIGNER, "initramfs_sha256": sha256(output),
-                "bootstrap_files": sorted(selected), "rootfs_url": args.rootfs_url}
+                "bootstrap_files": sorted(selected), "rootfs_url": args.rootfs_url,
+                "root_partuuid": args.root_partuuid,
+                "root_mode": "userdata" if args.root_partuuid else "ram"}
     (args.output_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(json.dumps(manifest, indent=2))
 

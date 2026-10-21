@@ -10,9 +10,8 @@ it onto a 4 GiB tmpfs. No partition is formatted or used to store the rootfs.
 The installation and its changes are lost when the device reboots.
 
 Storage inspection found a 16 MiB metadata partition and no directly
-recognizable plaintext filesystem on userdata. Neither is treated as space
-available for installing Arch. Persistent installation requires a separate
-storage plan. Keep the working three-image rollback set intact.
+recognizable plaintext filesystem on userdata. This does not imply that
+userdata is empty. Keep the working three-image rollback set intact.
 
 Prerequisites
 -------------
@@ -137,3 +136,50 @@ requires downloading the RAM rootfs again. To restore the earlier pure
 diagnostic environment, use the device keys to enter fastboot and flash
 the saved normal-display boot_a/vendor_boot_a/dtbo_a set together, then
 select slot a and reboot. Linux ``reboot bootloader`` remains unsupported.
+
+Optional persistent userdata root
+---------------------------------
+
+This mode replaces Android userdata with ext4. Formatting destroys Android
+user data, including apps, photos and files. Obtain explicit agreement to
+that loss and back up anything needed before executing the installer.
+Restoring stock boot images does not restore erased Android user data.
+The partition table, metadata and other Android partitions are not changed.
+
+Run the inspection first, inside the working RAM-root Arch system. Obtain
+the GPT PARTUUID and exact byte size from that device, rather than copying
+another phone's values::
+
+  bash install-userdata PARTUUID SIZE_BYTES
+
+Inspection is read-only. The installer checks the UUID, userdata label,
+size, mount state and device-mapper holders and requires a tmpfs source root
+with systemd as PID 1. Only after the destructive operation is authorized::
+
+  bash install-userdata PARTUUID SIZE_BYTES --erase-userdata
+
+The script formats only that existing partition, then copies the running
+Arch RAM installation, preserving ACLs, extended attributes, packages,
+SSH host keys and configuration. API mounts, temporary files and changing
+logs are excluded. Do not install packages or change files during copying.
+It writes an ext4 UUID-based fstab, validates systemd and sshd, writes an
+installation marker and checks the unmounted filesystem. Failure requires
+inspection before retrying; a retry with the erase flag formats again.
+The current RAM system stays running throughout installation.
+
+Build the bootstrap as above with the additional option::
+
+  --root-partuuid PARTUUID
+
+Package and validate the matching boot/vendor_boot/dtbo set. Keep the RAM
+bootstrap image set separately for recovery. This initramfs automatically
+finds the exact userdata partition by GPT PARTUUID, mounts it as ext4,
+checks its installation marker and init executable, then switches to
+systemd. No HTTP server or rootfs download is needed for persistent boot.
+An absent or invalid installation leaves the ACM rescue shell available;
+the initramfs never formats a partition. In that shell, ``arch-prepare``
+retries mounting userdata and ``arch-boot`` requests the handoff.
+
+The persistent mode is prepared for testing. The RAM-root device validation
+above does not establish that userdata installation or reboot persistence
+has passed on hardware.

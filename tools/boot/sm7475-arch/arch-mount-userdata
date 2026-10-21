@@ -1,0 +1,39 @@
+#!/bin/busybox sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Mount only an explicitly installed Arch root. Never format or download here.
+set -eu
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+. /etc/arch-bootstrap.conf
+[ -n "${ROOT_PARTUUID:-}" ] || exit 1
+[ -e /run/arch-prepared ] && exit 0
+mountpoint -q /newroot && { echo '/newroot is already mounted'; exit 1; }
+device=
+attempt=0
+while [ "$attempt" -lt 15 ]; do
+    for entry in /sys/class/block/*; do
+        [ -r "$entry/partition" ] && [ -r "$entry/uevent" ] || continue
+        grep -qx "PARTUUID=$ROOT_PARTUUID" "$entry/uevent" || continue
+        grep -qx 'PARTNAME=userdata' "$entry/uevent" || exit 1
+        [ -z "$device" ] || { echo 'Duplicate userdata UUID'; exit 1; }
+        device="/dev/${entry##*/}"
+    done
+    [ -z "$device" ] || break
+    sleep 1
+    attempt=$((attempt + 1))
+done
+[ -b "$device" ] || { echo 'Expected userdata partition not found'; exit 1; }
+mount -t ext4 -o ro "$device" /newroot
+if [ ! -f /newroot/etc/sm7475-arch-root ] ||
+   [ "$(cat /newroot/etc/sm7475-arch-root)" != "$ROOT_PARTUUID" ] ||
+   [ ! -x /newroot/usr/lib/systemd/systemd ] || [ ! -x /newroot/sbin/init ]; then
+    umount /newroot
+    echo 'No complete Arch installation on expected userdata'
+    exit 1
+fi
+if ! mount -o remount,rw /newroot; then
+    umount /newroot
+    exit 1
+fi
+mkdir -p /newroot/dev /newroot/proc /newroot/sys /newroot/run
+touch /run/arch-prepared
+echo "Arch root ready on $device ($ROOT_PARTUUID)"

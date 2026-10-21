@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
+# Run on the working RAM-root Arch phone. Inspection is the default.
+set -euo pipefail
+die() { echo "ERROR: $*" >&2; exit 1; }
+[[ $# == 2 || $# == 3 ]] || die 'Usage: install-userdata PARTUUID SIZE_BYTES [--erase-userdata]'
+partuuid=$1
+expected_bytes=$2
+action=${3:---check}
+[[ $partuuid =~ ^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$ ]] || die 'Invalid UUID'
+[[ $expected_bytes =~ ^[0-9]+$ ]] || die 'Invalid byte size'
+[[ $action == --check || $action == --erase-userdata ]] || die 'Unknown action'
+[[ $EUID == 0 ]] || die 'Run as root on the phone'
+[[ $(findmnt -n -o FSTYPE /) == tmpfs ]] || die 'Source / must be the RAM-root Arch installation'
+[[ $(readlink /proc/1/exe) == /usr/lib/systemd/systemd ]] || die 'Arch systemd must be PID 1'
+[[ ! -e /var/lib/pacman/db.lck ]] || die 'Package manager is busy'
+for tool in bsdtar mkfs.ext4 e2fsck blkid blockdev chroot; do
+    command -v "$tool" >/dev/null || die "Missing $tool"
+done
+devices=()
+for entry in /sys/class/block/*; do
+    [[ -f $entry/partition && -r $entry/uevent ]] || continue
+    grep -qx "PARTUUID=$partuuid" "$entry/uevent" || continue
+    grep -qx 'PARTNAME=userdata' "$entry/uevent" || die 'UUID is not userdata'
+    devices+=("/dev/${entry##*/}")
+done
+[[ ${#devices[@]} == 1 ]] || die 'Expected exactly one matching userdata partition'
+device=${devices[0]}
+entry=/sys/class/block/${device##*/}
+[[ -b $device && $(cat "$entry/ro") == 0 ]] || die 'Partition is not writable'
+[[ $(blockdev --getsize64 "$device") == "$expected_bytes" ]] || die 'Partition size changed'
+shopt -s nullglob
+holders=("$entry"/holders/*)
+[[ ${#holders[@]} == 0 ]] || die 'Partition has active device-mapper holders'
+[[ -z $(lsblk -nr -o MOUNTPOINTS "$device" | tr -d '[:space:]') ]] || die 'Partition is mounted'
+echo "Target: $device; PARTLABEL=userdata; PARTUUID=$partuuid; bytes=$expected_bytes"
+blkid -p "$device" || true
+echo 'Formatting this partition destroys Android user data, including apps, photos and files.'
+if [[ $action == --check ]]; then
+    echo 'CHECK ONLY: no partition writes. Explicit --erase-userdata is required to install.'
+    exit 0
+fi
+# Refuse a concurrent invocation before the first destructive operation.
+mkdir /run/sm7475-userdata-install || die 'Another installer is active'
+target=
+bound=()
+cleanup() {
+    local path
+    for path in "${bound[@]}"; do umount "$target/$path" || true; done
+    if [[ -n $target ]]; then
+        mountpoint -q "$target" && umount "$target" || true
+        rmdir "$target" || true
+    fi
+    rmdir /run/sm7475-userdata-install || true
+}
+trap cleanup EXIT
+mkdir -p /mnt
+target=$(mktemp -d /mnt/arch-userdata.XXXXXX)
+mkfs.ext4 -F -m 0 -L archroot -E nodiscard "$device"
+mount -t ext4 "$device" "$target"
+# Exclude API filesystems, the destination, temporary files and changing logs.
+# Keep installed packages, user configuration, SSH host keys and package keyring.
+bsdtar --acls --xattrs --one-file-system -cpf - -C / \
+    --exclude ./dev --exclude ./proc --exclude ./sys --exclude ./run \
+    --exclude ./tmp --exclude ./mnt --exclude ./media --exclude ./var/log \
+    --exclude ./var/tmp . |
+    bsdtar --acls --xattrs --numeric-owner -xpf - -C "$target"
+mkdir -p "$target"/{dev,proc,sys,run,mnt,media,tmp,var/tmp,var/log}
+chmod 1777 "$target/tmp" "$target/var/tmp"
+fsuuid=$(blkid -s UUID -o value "$device")
+[[ -n $fsuuid ]] || die 'Missing ext4 filesystem UUID'
+printf 'UUID=%s / ext4 defaults 0 1\n' "$fsuuid" > "$target/etc/fstab"
+for path in dev proc sys; do
+    mount --bind "/$path" "$target/$path"
+    bound=("$path" "${bound[@]}")
+done
+chroot "$target" /usr/lib/systemd/systemd --version
+chroot "$target" /usr/bin/pacman -Q systemd openssh pacman
+chroot "$target" /usr/bin/sshd -t
+for path in "${bound[@]}"; do umount "$target/$path"; done
+bound=()
+printf '%s\n' "$partuuid" > "$target/etc/sm7475-arch-root"
+sync
+umount "$target"
+e2fsck -fn "$device"
+echo "Installed Arch on $device; filesystem UUID=$fsuuid. RAM root is still running."
+echo 'Boot with the matching userdata initramfs; it mounts by GPT PARTUUID.'

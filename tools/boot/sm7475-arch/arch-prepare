@@ -3,6 +3,9 @@
 # Download a pinned, signature-verified-on-host rootfs into RAM; touch no UFS.
 set -eu
 . /etc/arch-bootstrap.conf
+if [ -n "${ROOT_PARTUUID:-}" ]; then
+    exec /bin/arch-mount-userdata
+fi
 [ -e /run/arch-prepared ] && exit 0
 mkdir /run/arch-preparing || { echo 'Another Arch preparation is active'; exit 1; }
 bound_paths=

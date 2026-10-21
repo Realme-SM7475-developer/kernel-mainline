@@ -28,7 +28,15 @@ start_serial() {
   serial_supervisor=$!
 }
 start_serial
-echo '<3>Arch bootstrap ready: run arch-prepare, then arch-boot over USB serial' > /dev/kmsg
+if [ -n "${ROOT_PARTUUID:-}" ]; then
+    if /bin/arch-mount-userdata; then
+        touch /run/arch-boot
+    else
+        echo '<3>Arch userdata unavailable; USB rescue shell retained' > /dev/kmsg
+    fi
+else
+    echo '<3>Arch bootstrap ready: run arch-prepare, then arch-boot over USB serial' > /dev/kmsg
+fi
 while :; do
     if [ -f /run/arch-boot ] && [ -x /newroot/usr/lib/systemd/systemd ]; then
         echo '<3>Arch bootstrap: handing PID 1 to systemd' > /dev/kmsg
