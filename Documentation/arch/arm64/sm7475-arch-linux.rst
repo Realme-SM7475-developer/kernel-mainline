@@ -214,3 +214,73 @@ Evidence is in ``archlinuxarm/userdata-install.txt``,
 console boot; touch, GPU acceleration, wireless and phone power management
 still require separate bring-up. Keep the RAM bootstrap and diagnostic
 rollback images; restoring them does not undo the userdata formatting.
+
+Xfce desktop with software rendering
+-----------------------------------
+
+The persistent Arch root can run Xfce on the existing DPU/DSI display even
+while GPU acceleration is unavailable. Copy ``tools/boot/sm7475-arch/setup-desktop``
+onto the phone and run it from the native Arch root shell::
+
+  bash setup-desktop --install-packages
+  systemctl start lightdm
+
+The installer performs a full package upgrade, installs Xorg, LightDM,
+the Xfce session, fonts and standard user directories, and configures local
+automatic login as the unprivileged ``alarm`` user. It leaves SSH key
+authentication and the ACM rescue service intact. The working kernel and
+Android boot images are not replaced by these userspace changes.
+
+Xorg uses modesetting on ``/dev/dri/card0`` with ``AccelMethod=none``, a
+shadow framebuffer and a software cursor. Both LightDM and its session
+set ``LIBGL_ALWAYS_SOFTWARE=1``; the initial Xfce profile disables window
+compositing and uses 192 DPI. Screen blanking is disabled because touch
+input is not available to wake the screen. Subsequent runs preserve the
+user's existing Xfce settings.
+
+The present kernel does not enable Landlock. With pacman 7.1 the optional
+package installation adds ``DisableSandboxFilesystem`` to pacman.conf;
+the download user, syscall sandbox and required package signatures remain
+enabled. Review that compatibility setting after adding Landlock support.
+On a slow mirror, pacman's ``--disable-download-timeout`` option can allow
+large downloads to complete without discarding already cached packages.
+
+After verifying the desktop, enable automatic graphical startup::
+
+  systemctl enable lightdm
+  systemctl set-default graphical.target
+
+To return to the console over SSH or the USB serial rescue shell::
+
+  systemctl disable --now lightdm
+  systemctl set-default multi-user.target
+  chvt 1
+
+The setup must give the user ownership of every configuration parent
+directory. Giving ownership only to the final xfconf directory leaves
+root-owned parents, prevents Xfce from saving settings and can make the
+panel and desktop exit. The script explicitly configures these parents
+and checks their writability as ``alarm`` before continuing.
+
+The device passed a controlled reboot into ``graphical.target`` with
+LightDM enabled and automatic login to Xfce. Xorg, xfce4-session, xfwm4,
+xfce4-panel and xfdesktop remained running as expected; the desktop clients
+run as ``alarm``. RandR reported 1240x2772 on DSI-1, compositing was disabled,
+192 DPI was active and both screen blanking and DPMS were disabled. The
+captured X root window shows the wallpaper, desktop icons and program bars.
+The user confirmed normal output on the phone's physical screen. The native
+kernel remains 6.18.0 and the root remains userdata/ext4.
+
+Systemd reported ``running`` with zero failed units; SSH, USB networking,
+the serial rescue service and HTTPS still passed after reboot. Available
+RAM was about 6.3 GiB and the root had about 214 GiB free. Evidence and a
+desktop screenshot are under ``archlinuxarm/desktop/``, especially
+``reboot-validation.txt``, ``Xorg.0.log`` and ``desktop.png``. The X server's
+GPU probes may still report missing GPU errors; this validates software
+desktop rendering, not GPU acceleration. Touch input remains unavailable.
+
+References:
+
+* https://man.archlinux.org/man/extra/xorg-server/modesetting.4.en
+* https://wiki.freedesktop.org/www/Software/LightDM/CommonConfiguration/
+* https://docs.xfce.org/xfce/xfce4-session/start

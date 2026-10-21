@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
+# Configure an Xfce session for the working SM7475 KMS display without a GPU.
+set -euo pipefail
+die() { echo "ERROR: $*" >&2; exit 1; }
+[[ $# == 0 || ( $# == 1 && $1 == --install-packages ) ]] ||
+    die 'Usage: setup-desktop [--install-packages]'
+[[ $EUID == 0 && $(uname -m) == aarch64 ]] || die 'Run as root inside Arch on the phone'
+[[ $(readlink /proc/1/exe) == /usr/lib/systemd/systemd ]] || die 'Arch systemd must be PID 1'
+[[ -e /etc/sm7475-arch-root && -e /sys/class/drm/card0-DSI-1 ]] ||
+    die 'The persistent Arch root and working DSI display are required'
+[[ ! -e /var/lib/pacman/db.lck ]] || die 'Package manager is busy'
+getent passwd alarm >/dev/null || die 'The Arch Linux ARM alarm user is missing'
+if [[ ${1:-} == --install-packages ]]; then
+    # pacman 7.1 supports a narrow workaround for kernels without Landlock.
+    # Preserve the syscall sandbox, DownloadUser and package signature policy.
+    if ! grep -qw landlock /sys/kernel/security/lsm 2>/dev/null; then
+        pacman -S --help | grep -q -- --disable-sandbox-filesystem ||
+            die 'This pacman lacks the filesystem-sandbox compatibility option'
+        cp -an /etc/pacman.conf /etc/pacman.conf.before-sm7475-desktop
+        if ! grep -qx DisableSandboxFilesystem /etc/pacman.conf; then
+            sed -i '/^\[options\]/a DisableSandboxFilesystem' /etc/pacman.conf
+        fi
+    fi
+    pacman -Syu --needed --noconfirm xorg-server xorg-xinit xorg-xrandr \
+        xorg-xset xorg-xprop xorg-xwininfo xorg-xwd xf86-input-libinput \
+        lightdm lightdm-gtk-greeter xfce4-session xfce4-panel xfce4-settings \
+        xfdesktop xfwm4 thunar xfce4-terminal ttf-dejavu noto-fonts-cjk xdg-user-dirs
+fi
+for program in Xorg lightdm startxfce4 xset xdg-user-dirs-update; do
+    command -v "$program" >/dev/null || die "Missing $program; use --install-packages"
+done
+getent group autologin >/dev/null || groupadd -r autologin
+usermod -aG autologin alarm
+install -d /etc/X11/xorg.conf.d /etc/lightdm/lightdm.conf.d \
+    /usr/local/libexec /usr/share/xsessions /etc/systemd/system/lightdm.service.d
+cat > /etc/systemd/system/lightdm.service.d/20-sm7475-software.conf <<'EOF'
+[Service]
+Environment=LIBGL_ALWAYS_SOFTWARE=1
+EOF
+cat > /etc/X11/xorg.conf.d/20-sm7475-software.conf <<'EOF'
+Section "Device"
+    Identifier "SM7475 DPU"
+    Driver "modesetting"
+    Option "kmsdev" "/dev/dri/card0"
+    Option "AccelMethod" "none"
+    Option "ShadowFB" "true"
+    Option "SWcursor" "true"
+EndSection
+EOF
+cat > /etc/lightdm/lightdm.conf.d/50-sm7475.conf <<'EOF'
+[Seat:*]
+autologin-user=alarm
+autologin-user-timeout=0
+autologin-session=sm7475-xfce
+user-session=sm7475-xfce
+greeter-session=lightdm-gtk-greeter
+xserver-command=X -dpi 192 -nolisten tcp
+EOF
+cat > /usr/local/libexec/sm7475-xfce-session <<'EOF'
+#!/bin/sh
+export LIBGL_ALWAYS_SOFTWARE=1
+# There is no working touch input to wake a blanked screen yet.
+xset s off
+xset -dpms
+exec startxfce4
+EOF
+chmod 0755 /usr/local/libexec/sm7475-xfce-session
+cat > /usr/share/xsessions/sm7475-xfce.desktop <<'EOF'
+[Desktop Entry]
+Name=Xfce (SM7475 software rendering)
+Type=Application
+Exec=/usr/local/libexec/sm7475-xfce-session
+TryExec=/usr/bin/startxfce4
+DesktopNames=XFCE
+EOF
+desktop_home=$(getent passwd alarm | cut -d: -f6)
+desktop_group=$(id -gn alarm)
+channels=$desktop_home/.config/xfce4/xfconf/xfce-perchannel-xml
+# install -d applies ownership to its named targets, not intermediate parents.
+# Xfce also creates dconf, panel, desktop and window-manager directories here.
+install -d -m 0700 -o alarm -g "$desktop_group" "$desktop_home/.config" \
+    "$desktop_home/.config/xfce4" "$desktop_home/.config/xfce4/xfconf" "$channels"
+for directory in "$desktop_home/.config" "$desktop_home/.config/xfce4" "$channels"; do
+    runuser -u alarm -- test -w "$directory" || die "User cannot write $directory"
+done
+runuser -u alarm -- xdg-user-dirs-update
+# Seed only a fresh profile, keeping later user preferences on repeated runs.
+if [[ ! -e $channels/xfwm4.xml ]]; then
+    cat > "$channels/xfwm4.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfwm4" version="1.0">
+  <property name="general" type="empty">
+    <property name="use_compositing" type="bool" value="false"/>
+  </property>
+</channel>
+EOF
+    chown alarm:"$desktop_group" "$channels/xfwm4.xml"
+fi
+if [[ ! -e $channels/xsettings.xml ]]; then
+    cat > "$channels/xsettings.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xsettings" version="1.0">
+  <property name="Xft" type="empty">
+    <property name="DPI" type="int" value="192"/>
+  </property>
+</channel>
+EOF
+    chown alarm:"$desktop_group" "$channels/xsettings.xml"
+fi
+if [[ ! -e $channels/xfce4-panel.xml && -f /etc/xdg/xfce4/panel/default.xml ]]; then
+    cp /etc/xdg/xfce4/panel/default.xml "$channels/xfce4-panel.xml"
+    sed -i 's/name="size" type="uint" value="26"/name="size" type="uint" value="48"/g' \
+        "$channels/xfce4-panel.xml"
+    chown alarm:"$desktop_group" "$channels/xfce4-panel.xml"
+fi
+systemctl daemon-reload
+echo 'Configured software-rendered Xfce with local autologin as alarm.'
+echo 'Test: systemctl start lightdm'
+echo 'After checking the screen: systemctl enable lightdm; systemctl set-default graphical.target'
+echo 'Console recovery: systemctl disable --now lightdm; systemctl set-default multi-user.target; chvt 1'
