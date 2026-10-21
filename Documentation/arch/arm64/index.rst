@@ -29,6 +29,7 @@ ARM64 Architecture
     silicon-errata
     sme
     sm7475-display-bringup
+    sm7475-arch-linux
     sve
     tagged-address-abi
     tagged-pointers

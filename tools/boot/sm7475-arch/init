@@ -1,0 +1,61 @@
+#!/bin/busybox sh
+# SPDX-License-Identifier: GPL-2.0-only
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+/bin/busybox --install -s /bin
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /run /tmp /newroot /sys/kernel/config /sys/kernel/debug /sys/fs/pstore
+mount -t devpts devpts /dev/pts
+mount -t tmpfs -o mode=0755 tmpfs /run
+mount -t debugfs debugfs /sys/kernel/debug
+mount -t pstore pstore /sys/fs/pstore 2>/dev/null || true
+. /etc/arch-bootstrap.conf
+[ "$(date +%s)" -ge "$BUILD_EPOCH" ] || date -u -s "@$BUILD_EPOCH"
+echo '<3>Arch bootstrap: starting USB ACM and ECM' > /dev/kmsg
+if ! /bin/arch-usb-network; then
+    echo '<3>Arch bootstrap: USB network setup failed' > /dev/kmsg
+fi
+start_serial() {
+  (
+    while :; do
+        /bin/busybox sh -c \
+            'echo $$ > /run/arch-serial-child.pid; exec /bin/busybox sh -i' \
+            </dev/ttyGS0 >/dev/ttyGS0 2>&1
+        sleep 1
+    done
+  ) &
+  serial_supervisor=$!
+}
+start_serial
+echo '<3>Arch bootstrap ready: run arch-prepare, then arch-boot over USB serial' > /dev/kmsg
+while :; do
+    if [ -f /run/arch-boot ] && [ -x /newroot/usr/lib/systemd/systemd ]; then
+        echo '<3>Arch bootstrap: handing PID 1 to systemd' > /dev/kmsg
+        sleep 1
+        kill "$serial_supervisor" 2>/dev/null || true
+        [ ! -r /run/arch-serial-child.pid ] ||
+            kill -KILL "$(cat /run/arch-serial-child.pid)" 2>/dev/null || true
+        moved=
+        failed=0
+        for path in run sys proc dev; do
+            if mount --move "/$path" "/newroot/$path"; then
+                moved="$path $moved"
+            else
+                failed=1
+                break
+            fi
+        done
+        if [ "$failed" = 1 ]; then
+            for path in $moved; do
+                mount --move "/newroot/$path" "/$path"
+            done
+            rm -f /run/arch-boot
+            echo '<3>Arch handoff mount failed; rescue shell restored' > /dev/kmsg
+            start_serial
+            continue
+        fi
+        exec /bin/busybox switch_root /newroot /sbin/init
+    fi
+    sleep 1
+done

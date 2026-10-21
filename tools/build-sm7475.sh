@@ -37,6 +37,7 @@
 #
 # 可用环境变量覆盖：OUT_DIR BUILD_ROOT JOBS CLANG_DIR MKBOOTIMG AVBTOOL
 #                   MKDTBOIMG BASE_BOOT BASE_VENDOR_BOOT DTBO_PARTITION_SIZE
+#                   INITRAMFS_IMAGE (optional prebuilt vendor ramdisk override)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -62,6 +63,7 @@ BASE_VENDOR_BOOT="${BASE_VENDOR_BOOT:-$PROJECT_ROOT/mainline/prebulit/vendor_boo
 BASE_DTBO="${BASE_DTBO:-$PROJECT_ROOT/mainline/prebulit/dtbo_a.img}"
 DEBUG_RAMDISK_TOOL="$PROJECT_ROOT/mainline/tools/mkirfs.py"
 DEBUG_RAMDISK="$PROJECT_ROOT/mainline/tools/initramfs.cpio.gz"
+INITRAMFS_IMAGE="${INITRAMFS_IMAGE:-}"
 VENDOR_RAMDISK_OVERLAY="$PROJECT_ROOT/mainline/tools/overlay_vendor_ramdisk.py"
 
 # dtbo 分区实际大小（0x1800000 = 24 MiB），打包时补齐，避免只覆盖分区开头
@@ -249,12 +251,16 @@ package() {
 		--output-dir "$OUT_DIR" >/dev/null
 	# Keep the ACM shell in vendor_boot; the stock ramdisk cannot provide this
 	# early-boot debugging console on the current mainline image.
-	need "$DEBUG_RAMDISK_TOOL"
 	need "$VENDOR_RAMDISK_OVERLAY"
-	python3 "$DEBUG_RAMDISK_TOOL"
-	need "$DEBUG_RAMDISK"
+	local selected_ramdisk="$INITRAMFS_IMAGE"
+	if [ -z "$selected_ramdisk" ]; then
+		need "$DEBUG_RAMDISK_TOOL"
+		python3 "$DEBUG_RAMDISK_TOOL"
+		selected_ramdisk="$DEBUG_RAMDISK"
+	fi
+	need "$selected_ramdisk"
 	python3 "$VENDOR_RAMDISK_OVERLAY" \
-		"$OUT_DIR/vendor_boot.img" "$DEBUG_RAMDISK" \
+		"$OUT_DIR/vendor_boot.img" "$selected_ramdisk" \
 		"$KEY_DIR/vendor.key" "$AVBTOOL"
 	log "完成，产物："
 	ls -lh "$OUT_DIR"/boot.img "$OUT_DIR"/vendor_boot.img "$OUT_DIR"/dtbo.img

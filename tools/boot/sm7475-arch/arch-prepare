@@ -1,0 +1,87 @@
+#!/bin/busybox sh
+# SPDX-License-Identifier: GPL-2.0-only
+# Download a pinned, signature-verified-on-host rootfs into RAM; touch no UFS.
+set -eu
+. /etc/arch-bootstrap.conf
+[ -e /run/arch-prepared ] && exit 0
+mkdir /run/arch-preparing || { echo 'Another Arch preparation is active'; exit 1; }
+bound_paths=
+cleanup() {
+    for path in $bound_paths; do
+        umount "/newroot/$path" || true
+    done
+    rmdir /run/arch-preparing
+}
+trap cleanup EXIT
+mkdir -p /newroot
+archive=/tmp/arch-rootfs.tar.gz
+echo "Downloading Arch Linux ARM from $ROOTFS_URL"
+wget -T 60 -O "$archive" "$ROOTFS_URL"
+echo "$ROOTFS_SHA256  $archive" | sha256sum -c -
+mountpoint -q /newroot || mount -t tmpfs -o size=4G,mode=0755 tmpfs /newroot
+# The signed archive supplies bsdtar and its exact library dependencies.
+# Unlike BusyBox tar, this preserves ACLs, capabilities and extended attributes.
+/bootstrap/usr/lib/ld-linux-aarch64.so.1 \
+    --library-path /bootstrap/usr/lib /bootstrap/usr/bin/bsdtar \
+    --acls --xattrs --numeric-owner -xpf "$archive" -C /newroot
+rm "$archive"
+mkdir -p /newroot/proc /newroot/sys /newroot/dev /newroot/run /newroot/root/.ssh \
+    /newroot/usr/local/libexec /newroot/etc/systemd/network \
+    /newroot/etc/systemd/system/multi-user.target.wants \
+    /newroot/etc/ssh/sshd_config.d
+cp /etc/arch-authorized-key /newroot/root/.ssh/authorized_keys
+chmod 0700 /newroot/root/.ssh
+chmod 0600 /newroot/root/.ssh/authorized_keys
+cp /bin/busybox /newroot/usr/local/libexec/busybox
+cat > /newroot/etc/ssh/sshd_config.d/10-sm7475-usb.conf <<'EOF'
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+EOF
+echo gtneo5se > /newroot/etc/hostname
+: > /newroot/etc/machine-id
+rm -f /newroot/etc/resolv.conf
+echo 'nameserver 192.168.77.1' > /newroot/etc/resolv.conf
+cat > /newroot/etc/systemd/network/10-sm7475-usb.network <<'EOF'
+[Match]
+MACAddress=02:74:75:00:00:02
+[Network]
+Address=192.168.77.2/24
+Gateway=192.168.77.1
+DNS=192.168.77.1
+EOF
+cat > /newroot/etc/systemd/system/sm7475-usb-shell.service <<'EOF'
+[Unit]
+Description=SM7475 physical USB rescue shell
+After=systemd-udevd.service
+ConditionPathExists=/dev/ttyGS0
+[Service]
+ExecStart=/usr/local/libexec/busybox sh -c 'exec /usr/local/libexec/busybox sh -i </dev/ttyGS0 >/dev/ttyGS0 2>&1'
+KillSignal=SIGHUP
+Restart=always
+RestartSec=1
+[Install]
+WantedBy=multi-user.target
+EOF
+for service in sshd systemd-networkd sm7475-usb-shell; do
+    case "$service" in
+        sm7475-usb-shell) unit=/etc/systemd/system/$service.service ;;
+        *) unit=/usr/lib/systemd/system/$service.service ;;
+    esac
+    ln -sf "$unit" "/newroot/etc/systemd/system/multi-user.target.wants/$service.service"
+done
+ln -sf /usr/lib/systemd/system/multi-user.target /newroot/etc/systemd/system/default.target
+for path in dev proc sys; do
+    mount --bind "/$path" "/newroot/$path"
+    bound_paths="$path $bound_paths"
+done
+chroot /newroot /usr/lib/systemd/systemd --version
+chroot /newroot /usr/bin/pacman --version
+chroot /newroot /usr/bin/ssh-keygen -A
+chroot /newroot /usr/bin/sshd -t
+for path in $bound_paths; do
+    umount "/newroot/$path"
+done
+bound_paths=
+touch /run/arch-prepared
+echo 'Arch rootfs is ready in RAM. Run arch-boot to start systemd as PID 1.'
