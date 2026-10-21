@@ -373,8 +373,6 @@ static int msm_mdss_reset(struct device *dev)
 		ret = clk_bulk_prepare_enable(num_clocks, clocks);
 		if (ret)
 			goto put_clocks;
-		dev_info(dev, "reset with %d MDSS clocks enabled\n",
-			 num_clocks);
 	}
 
 	ret = reset_control_assert(reset);
@@ -386,6 +384,10 @@ static int msm_mdss_reset(struct device *dev)
 	 */
 	msleep(20);
 	ret = reset_control_deassert(reset);
+	/* Printing before reset lets the bootloader scanout keep issuing reads. */
+	if (!ret && num_clocks)
+		dev_info(dev, "reset with %d MDSS clocks enabled\n",
+			 num_clocks);
 
 disable_clocks:
 	if (num_clocks)
