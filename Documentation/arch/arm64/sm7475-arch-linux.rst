@@ -509,10 +509,18 @@ overlay's stale symbol exports preserved the disabled camera regulator;
 the actual flash images retain those exports. Full dt-schema validation
 has not been run.
 
-Candidate images are in ``out-touch-20261021`` and the verified normal
+The replacement images are in ``out-touch-gpio-fixed-20261021``; the
+initial supply-failure build remains ``out-touch-20261021``. The normal
 desktop rollback remains ``out-battery-gauge-20261021``. Evidence and
 the image validator are in ``archlinuxarm/touch/``. Hardware validation
-is pending: require application identification, a registered input
+of the first build found a pinctrl integration issue: Cape's GPIO
+function lacked the GPIO function flag expected by the generic pinmux
+core. Selecting a GPIO pinctrl state then requesting the same pin via
+gpiolib failed, including the touch regulator's own GPIO97 request.
+Use ``MSM_GPIO_PIN_FUNCTION(gpio)`` as on the upstream SM8450 driver.
+The first boot retained normal Arch services, but touch probe deferred
+because this regulator failed. Touch events remain unverified in the
+replacement build: require application identification, a registered input
 device, real contact/release events and usable Plasma taps/swipes before
 claiming the touchscreen works. Flash only the matching a-slot
 boot/vendor_boot/dtbo trio; do not format or reinstall userdata.

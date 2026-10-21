@@ -1388,7 +1388,7 @@ static const char * const vsense_trigger_groups[] = {
 };
 
 static const struct pinfunction cape_functions[] = {
-	FUNCTION(gpio),
+	MSM_GPIO_PIN_FUNCTION(gpio),
 	FUNCTION(qup0),
 	FUNCTION(qdss_cti),
 	FUNCTION(qup1),
