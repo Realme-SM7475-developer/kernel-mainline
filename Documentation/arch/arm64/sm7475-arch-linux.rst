@@ -898,3 +898,80 @@ ID is ``46983792-67cf-4fe0-9ca3-b8cb786ed951``; evidence includes
 remain expected with this bootstrap; the post-root service must finish
 successfully and register the PHY. Old display-stream SMMU faults before
 MDSS reset remain observable; no Wi-Fi stream 0x1c01 fault was observed.
+
+Kernel stability audit (2026-10-22)
+----------------------------------
+
+The Wi-Fi kernel was inspected without reflashing or changing driver
+parameters. Boot ID ``46983792-67cf-4fe0-9ca3-b8cb786ed951`` remained
+unchanged throughout. No kernel Oops/panic, RCU stall, bad-page report,
+ext4 error or runtime lockup was observed in the captured log. Both
+pstore locations were empty. This is a limited bring-up check, not a
+long-duration stability qualification.
+
+Outstanding kernel integration issues, in priority order:
+
+* CPU power and thermal management is incomplete. The running config has
+  ``CONFIG_ARM_QCOM_CPUFREQ_HW`` disabled and no cpufreq policies or CPU0
+  cpuidle states are registered. TSENS is built in, but the live tree has
+  no matching TSENS node; the only thermal zone is the BQ28Z610 battery.
+  CPU/GPU die temperatures and kernel CPU cooling have not been verified.
+  Sustained multicore stress was therefore not attempted. Battery
+  temperature must not be presented as a measurement of CPU temperature.
+* DISPCC emits ``disp_cc_mdss_mdp_clk_src: rcg didn't update its
+  configuration`` from ``clk_rcg2_shared_init`` during registration.
+  Display operation later succeeds, but the early update timeout remains
+  unresolved. Do not merely suppress the WARN or change the previously
+  validated MDSS clock-before-reset order to hide it.
+* SPMI PMIC probes fail with -EIO at SIDs 5 and 9. The live tree also
+  contains two enabled children for each of SIDs 8 and 9 under the same
+  arbiter (pm8010 and pm8010i/j names), causing -EEXIST. The duplicate DT
+  descriptions are confirmed; the physical cause of each failed access
+  still requires comparison with the actual board wiring.
+* Ten early display-stream SMMU faults (0x2800/0x2c00) occur before MDSS
+  reset in this boot. None recurred during the checks. They are distinct
+  from the Wi-Fi endpoint stream 0x1c01.
+* Wi-Fi was deauthenticated by the AP with reason 6
+  (CLASS2_FRAME_FROM_NONAUTH_STA) during the bounded checks, then
+  reauthenticated and associated in less than a second. No ath11k
+  firmware crash was logged. Driver, AP and RF causes are not separated
+  by this event; connectivity still needs longer testing.
+
+The taint value is 516, consisting of CPU_OUT_OF_SPEC (4) and WARN (512),
+not an Oops taint. The CPU feature log differs by bit 24 of MMFR1,
+corresponding to SpecSEI on the heterogeneous cores; this tree marks that
+field STRICT/HIGHER_SAFE. This is not evidence by itself of damaged CPUs
+or memory corruption. Both the feature variation and the DISPCC/SPMI
+warnings also appear in the saved pre-Wi-Fi key-release logs.
+
+Two additional problems are outside kernel crash handling. Coredump
+records from the preceding boot show two plasmashell SIGSEGVs at
+21:14/21:15, with the inspected stack in
+``NetworkManager::WirelessSetting::mode`` and ``libplasmanm_internal``.
+No coredump belongs to the audited boot. The user document portal is
+failed because /dev/fuse is absent: FUSE is configured as a module, but
+only a distribution 7.2.11 module tree is installed for the running 6.18
+kernel. Provide a matching module set or build the required support in;
+do not load modules from the other kernel. System services have no failed
+units, which does not include this failed user service.
+
+The finite checks passed: a brief SHA256 calculation pinned to each of
+CPUs 0-7; one 64 MiB memtester iteration pinned to CPU0 (about 41 seconds);
+a 64 MiB temporary ext4 file written and read with aligned O_DIRECT and
+matching SHA256; and native Freedreno plus Zink/Turnip 1024-square GPU
+readbacks. The temporary data file was removed. A further read-only
+4 MiB direct read of userdata did not increase SCSI error counters;
+existing nonzero counters alone are not a disk-failure diagnosis.
+Battery temperature during the checks was 32.4-32.6 C. No new WARN or
+memory/storage/GPU fault appeared; taint remained 516. The new kernel
+messages were the Wi-Fi deauthentication/reassociation described above.
+GPU and GMU later both returned to runtime-suspended state.
+
+Evidence is under ``archlinuxarm/kernel-audit-20261022/``: running config,
+full kernel and user logs, live DT inventory, coredump stack, before/after
+kernel log, finite-test script/results and direct-I/O counter comparison.
+Soft-lockup/hung-task detectors and KASAN/KFENCE are disabled in this
+build, so absence of their reports is not proof that latent defects do
+not exist. System suspend, long full-load runs, RF qualification and
+charging/thermal protection remain unverified. Prioritize CPU frequency
+and die thermal/cooling integration before expanding sustained stress.
