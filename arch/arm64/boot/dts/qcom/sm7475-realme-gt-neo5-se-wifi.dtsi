@@ -1,0 +1,347 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-3-Clause)
+/* Senna QCA6490: stock PCIe0, TLMM and RPMh supply wiring. */
+
+&soc {
+	mainline_pcie_noc: interconnect@16c0000 {
+		compatible = "qcom,sm8450-pcie-anoc";
+		reg = <0x016c0000 0xe280>;
+		#interconnect-cells = <2>;
+		qcom,bcm-voters = <&mainline_apps_bcm_voter>;
+	};
+
+	mainline_pcie0: pcie@1c00000 {
+		compatible = "qcom,pcie-sm8450-pcie0";
+		reg = <0x01c00000 0x3000>,
+		      <0x60000000 0xf1d>,
+		      <0x60000f20 0xa8>,
+		      <0x60001000 0x1000>,
+		      <0x60100000 0x100000>;
+		reg-names = "parf", "dbi", "elbi", "atu", "config";
+		device_type = "pci";
+		linux,pci-domain = <0>;
+		bus-range = <0x00 0xff>;
+		num-lanes = <1>;
+		max-link-speed = <2>;
+		dma-coherent;
+
+		#address-cells = <3>;
+		#size-cells = <2>;
+
+		ranges = <0x01000000 0x0 0x00000000 0x60200000 0x0 0x100000>,
+			 <0x02000000 0x0 0x60300000 0x60300000 0x0 0x3d00000>;
+
+		msi-map = <0x0 &gic_its 0x5980 0x1>,
+			  <0x100 &gic_its 0x5981 0x1>;
+		msi-map-mask = <0xff00>;
+		interrupts = <GIC_SPI 141 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 142 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 143 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 144 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 145 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 146 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 147 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 148 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 140 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "msi0",
+				  "msi1",
+				  "msi2",
+				  "msi3",
+				  "msi4",
+				  "msi5",
+				  "msi6",
+				  "msi7",
+				  "global";
+		#interrupt-cells = <1>;
+		interrupt-map-mask = <0 0 0 0x7>;
+		interrupt-map = <0 0 0 1 &intc 0 0 GIC_SPI 149 IRQ_TYPE_LEVEL_HIGH>, /* int_a */
+				<0 0 0 2 &intc 0 0 GIC_SPI 150 IRQ_TYPE_LEVEL_HIGH>, /* int_b */
+				<0 0 0 3 &intc 0 0 GIC_SPI 151 IRQ_TYPE_LEVEL_HIGH>, /* int_c */
+				<0 0 0 4 &intc 0 0 GIC_SPI 152 IRQ_TYPE_LEVEL_HIGH>; /* int_d */
+
+		interconnects = <&mainline_pcie_noc MASTER_PCIE_0 QCOM_ICC_TAG_ALWAYS
+				 &mainline_mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>,
+				<&mainline_gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS
+				 &mainline_config_noc SLAVE_PCIE_0 QCOM_ICC_TAG_ALWAYS>;
+		interconnect-names = "pcie-mem", "cpu-pcie";
+
+		clocks = <&gcc GCC_PCIE_0_PIPE_CLK>,
+			 <&gcc GCC_PCIE_0_PIPE_CLK_SRC>,
+			 <&mainline_pcie0_phy>,
+			 <&rpmhcc RPMH_CXO_CLK>,
+			 <&gcc GCC_PCIE_0_AUX_CLK>,
+			 <&gcc GCC_PCIE_0_CFG_AHB_CLK>,
+			 <&gcc GCC_PCIE_0_MSTR_AXI_CLK>,
+			 <&gcc GCC_PCIE_0_SLV_AXI_CLK>,
+			 <&gcc GCC_PCIE_0_SLV_Q2A_AXI_CLK>,
+			 <&gcc GCC_DDRSS_PCIE_SF_TBU_CLK>,
+			 <&gcc GCC_AGGRE_NOC_PCIE_0_AXI_CLK>,
+			 <&gcc GCC_AGGRE_NOC_PCIE_1_AXI_CLK>;
+		clock-names = "pipe",
+			      "pipe_mux",
+			      "phy_pipe",
+			      "ref",
+			      "aux",
+			      "cfg",
+			      "bus_master",
+			      "bus_slave",
+			      "slave_q2a",
+			      "ddrss_sf_tbu",
+			      "aggre0",
+			      "aggre1";
+
+		iommu-map = <0x0   &mainline_apps_smmu 0x1c00 0x1>,
+			    <0x100 &mainline_apps_smmu 0x1c01 0x1>;
+
+		resets = <&gcc GCC_PCIE_0_BCR>;
+		reset-names = "pci";
+
+		power-domains = <&gcc PCIE_0_GDSC>;
+
+		phys = <&mainline_pcie0_phy>;
+		phy-names = "pciephy";
+
+		perst-gpios = <&tlmm 94 GPIO_ACTIVE_LOW>;
+		wake-gpios = <&tlmm 96 GPIO_ACTIVE_HIGH>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&wlan_pcie_default_state>;
+
+		operating-points-v2 = <&mainline_pcie0_opp_table>;
+
+		status = "okay";
+
+		mainline_pcie0_opp_table: opp-table {
+			compatible = "operating-points-v2";
+
+			/* GEN 1 x1 */
+			opp-2500000 {
+				opp-hz = /bits/ 64 <2500000>;
+				required-opps = <&rpmhpd_opp_low_svs>;
+				opp-peak-kBps = <250000 1>;
+			};
+
+			/* GEN 2 x1 */
+			opp-5000000 {
+				opp-hz = /bits/ 64 <5000000>;
+				required-opps = <&rpmhpd_opp_low_svs>;
+				opp-peak-kBps = <500000 1>;
+			};
+
+			/* GEN 3 x1 */
+			opp-8000000 {
+				opp-hz = /bits/ 64 <8000000>;
+				required-opps = <&rpmhpd_opp_nom>;
+				opp-peak-kBps = <984500 1>;
+			};
+		};
+
+		mainline_pcieport0: pcie@0 {
+			device_type = "pci";
+			reg = <0x0 0x0 0x0 0x0 0x0>;
+			bus-range = <0x01 0xff>;
+
+			#address-cells = <3>;
+			#size-cells = <2>;
+			ranges;
+		};
+	};
+
+	mainline_pcie0_phy: phy@1c06000 {
+		compatible = "qcom,sm8475-qmp-gen3x1-pcie-phy";
+		reg = <0x01c06000 0x2000>;
+
+		clocks = <&gcc GCC_PCIE_0_AUX_CLK>,
+			 <&gcc GCC_PCIE_0_CFG_AHB_CLK>,
+			 <&gcc GCC_PCIE_0_CLKREF_EN>,
+			 <&gcc GCC_PCIE_0_PHY_RCHNG_CLK>,
+			 <&gcc GCC_PCIE_0_PIPE_CLK>;
+		clock-names = "aux",
+			      "cfg_ahb",
+			      "ref",
+			      "rchng",
+			      "pipe";
+
+		clock-output-names = "pcie_0_pipe_clk";
+		#clock-cells = <0>;
+
+		#phy-cells = <0>;
+
+		resets = <&gcc GCC_PCIE_0_PHY_BCR>;
+		reset-names = "phy";
+
+		assigned-clocks = <&gcc GCC_PCIE_0_PHY_RCHNG_CLK>;
+		assigned-clock-rates = <100000000>;
+
+		vdda-phy-supply = <&display_phy_vdds>;
+		vdda-pll-supply = <&display_host_vdda>;
+		status = "okay";
+	};
+
+};
+
+&gcc {
+	clocks = <&rpmhcc RPMH_CXO_CLK>, <&sleep_clk>, <&mainline_pcie0_phy>;
+	clock-names = "bi_tcxo", "sleep_clk", "pcie_0_pipe_clk";
+};
+
+/ {
+	wcn6855-pmu {
+		compatible = "qcom,wcn6855-pmu";
+		pinctrl-0 = <&wlan_enable_state>, <&wlan_bt_enable_state>,
+			    <&wlan_xo_state>;
+		pinctrl-names = "default";
+		wlan-enable-gpios = <&tlmm 80 GPIO_ACTIVE_HIGH>;
+		bt-enable-gpios = <&tlmm 81 GPIO_ACTIVE_HIGH>;
+		swctrl-gpios = <&tlmm 82 GPIO_ACTIVE_HIGH>;
+		xo-clk-gpios = <&tlmm 204 GPIO_ACTIVE_HIGH>;
+
+		vddio-supply = <&wlan_s10b>;
+		vddaon-supply = <&wlan_s11b>;
+		vddpmu-supply = <&wlan_s12b>;
+		vddpmumx-supply = <&wlan_s2e>;
+		vddpmucx-supply = <&wlan_s11b>;
+		vddrfa0p95-supply = <&wlan_s11b>;
+		vddrfa1p3-supply = <&wlan_s12b>;
+		vddrfa1p9-supply = <&wlan_s1c>;
+		vddpcie1p3-supply = <&wlan_s12b>;
+		vddpcie1p9-supply = <&wlan_s1c>;
+
+		regulators {
+			wlan_pmu_rfacmn: ldo0 {
+				regulator-name = "wlan_pmu_rfacmn";
+			};
+			wlan_pmu_aon: ldo1 {
+				regulator-name = "wlan_pmu_aon";
+			};
+			wlan_pmu_wlcx: ldo2 {
+				regulator-name = "wlan_pmu_wlcx";
+			};
+			wlan_pmu_wlmx: ldo3 {
+				regulator-name = "wlan_pmu_wlmx";
+			};
+			wlan_pmu_btcmx: ldo4 {
+				regulator-name = "wlan_pmu_btcmx";
+			};
+			wlan_pmu_pcie1p8: ldo5 {
+				regulator-name = "wlan_pmu_pcie1p8";
+			};
+			wlan_pmu_pcie0p9: ldo6 {
+				regulator-name = "wlan_pmu_pcie0p9";
+			};
+			wlan_pmu_rfa0p8: ldo7 {
+				regulator-name = "wlan_pmu_rfa0p8";
+			};
+			wlan_pmu_rfa1p2: ldo8 {
+				regulator-name = "wlan_pmu_rfa1p2";
+			};
+			wlan_pmu_rfa1p8: ldo9 {
+				regulator-name = "wlan_pmu_rfa1p8";
+			};
+		};
+	};
+};
+
+&mainline_pcieport0 {
+	wifi@0 {
+		compatible = "pci17cb,1103";
+		reg = <0x10000 0 0 0 0>;
+		vddrfacmn-supply = <&wlan_pmu_rfacmn>;
+		vddaon-supply = <&wlan_pmu_aon>;
+		vddwlcx-supply = <&wlan_pmu_wlcx>;
+		vddwlmx-supply = <&wlan_pmu_wlmx>;
+		vddpcie1p8-supply = <&wlan_pmu_pcie1p8>;
+		vddpcie0p9-supply = <&wlan_pmu_pcie0p9>;
+		vddrfa0p8-supply = <&wlan_pmu_rfa0p8>;
+		vddrfa1p2-supply = <&wlan_pmu_rfa1p2>;
+		vddrfa1p8-supply = <&wlan_pmu_rfa1p8>;
+	};
+};
+
+/* Stock CNSS requested voltage ranges, not the unrelated PMIC reset defaults. */
+&apps_rsc {
+	regulators-display-b {
+		wlan_s10b: smps10 {
+			regulator-name = "wlan_s10b";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+		};
+		wlan_s11b: smps11 {
+			regulator-name = "wlan_s11b";
+			regulator-min-microvolt = <966000>;
+			regulator-max-microvolt = <1170000>;
+		};
+		wlan_s12b: smps12 {
+			regulator-name = "wlan_s12b";
+			regulator-min-microvolt = <1350000>;
+			regulator-max-microvolt = <2040000>;
+		};
+	};
+	regulators-display-c {
+		wlan_s1c: smps1 {
+			regulator-name = "wlan_s1c";
+			regulator-min-microvolt = <1900000>;
+			regulator-max-microvolt = <2024000>;
+		};
+	};
+	regulators-wlan-e {
+		compatible = "qcom,pmr735a-rpmh-regulators";
+		qcom,pmic-id = "e";
+		wlan_s2e: smps2 {
+			regulator-name = "wlan_s2e";
+			regulator-min-microvolt = <1012000>;
+			regulator-max-microvolt = <1040000>;
+		};
+		/* Shared WLAN antenna switch; leave powered during bring-up. */
+		wlan_antenna: ldo7 {
+			regulator-name = "wlan_antenna";
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+			regulator-always-on;
+		};
+	};
+};
+
+&tlmm {
+	wlan_pcie_default_state: wlan-pcie-default-state {
+		perst-pins {
+			pins = "gpio94";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+		clkreq-pins {
+			pins = "gpio95";
+			function = "pcie0_clkreqn";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+		wake-pins {
+			pins = "gpio96";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+	wlan_enable_state: wlan-enable-state {
+		pins = "gpio80";
+		function = "gpio";
+		drive-strength = <16>;
+		output-low;
+		bias-pull-down;
+	};
+	wlan_bt_enable_state: wlan-bt-enable-state {
+		pins = "gpio81";
+		function = "gpio";
+		drive-strength = <16>;
+		output-low;
+		bias-pull-down;
+	};
+	wlan_xo_state: wlan-xo-state {
+		pins = "gpio204";
+		function = "gpio";
+		drive-strength = <16>;
+		output-low;
+		bias-pull-down;
+	};
+};

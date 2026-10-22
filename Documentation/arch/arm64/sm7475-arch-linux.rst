@@ -802,3 +802,60 @@ normal screen off/on, and touch after screen-on. This is a separate
 confirmation from the earlier manual-module test. The finite capture
 ended naturally; temporary desktop inhibitors are gone and PowerDevil
 is restored. No diagnostic module is auto-loaded.
+
+QCA6490 Wi-Fi bring-up candidate
+-------------------------------
+
+As of 2026-10-22 this candidate has passed static checks only. It has not
+yet been booted on the phone; PCI enumeration, firmware startup, scanning
+and association remain unverified. The running device still uses the
+verified key/GPU release. A physical fastboot transition is pending.
+
+The stock Senna DT describes QCA6490 on PCIe0, using the WCN6855 PCI ID
+17cb:1103. The new board include describes the single-lane controller,
+PCIe NoC, ITS MSI mapping and SMMU streams 0x1c00/0x1c01. It caps the link
+at Gen2 and uses the stock PERST/CLKREQ/WAKE pins 94/95/96. The GCC consumes
+the PHY pipe-clock output as in the upstream SM8450 topology.
+
+The Cape PHY uses QSERDES v6 rather than the SM8450 v5 tuning. The new
+SM8475 Gen3x1 PHY description was taken from the local marble reference,
+then checked against this phone's stock ``qcom,phy-sequence``. All 79
+address/value tuning pairs match; three additional stock writes are the
+common power/reset/start controls handled by the PHY framework. Existing
+compatibles are unchanged. The binding document and selected PHY DTB
+node pass dt-schema validation, and the PHY patch and board include pass
+checkpatch without errors or warnings.
+
+The WCN6855 power sequencer uses WLAN/BT/SWCTRL/XO pins 80/81/82/204 and
+RPMh supplies S10B, S11B, S12B, S1C and S2E. Voltage constraints follow this
+phone's CNSS requested ranges, rather than inactive PMIC reset defaults.
+The shared antenna switch on L7E is held at 2.8 V during bring-up. The PHY
+reuses the already validated L5B 0.88 V and L10C 1.2 V supplies. Bluetooth
+operation is not enabled or validated by this Wi-Fi candidate.
+
+PHY, power sequencing, PCI power control, ath11k PCI, MHI, cfg80211,
+mac80211 and rfkill are built in because the Arch root has no matching
+6.18 module tree. The existing display, GPU, touch and key configuration
+is retained. ``out-wifi-20261022`` contains the matching first-test image
+trio; AVB, SHA256, embedded Image and padded selected DTB checks passed.
+Vendor ramdisk, table, bootconfig and userdata bootstrap remain identical
+to the key release. DTBO content is unchanged apart from re-signing.
+
+The factory overlay has obsolete symbol exports that standard libfdt
+rejects. For offline checks only, those exports were removed from a copy;
+the resulting merge retains the new PCIe, PMU and GCC clock definitions.
+The actual flash input retains the original factory entries. This static
+merge does not establish bootloader or hardware success.
+
+Arch already has the distribution's WCN6855 hw2.0/hw2.1 firmware. The
+phone's own ``modem_a/image/qca6490`` files were also copied read-only to
+``/root/sm7475-wifi-stock`` for comparison, without replacing the installed
+ath11k firmware. Select calibration data only after observing the actual
+QMI chip/board identity. Firmware and credentials must stay out of Git.
+NetworkManager is installed but was inactive at baseline; retain its
+existing USB unmanaged rule so networkd continues to provide USB access.
+
+Evidence, image hashes and the known-good key/GPU rollback hashes are in
+``archlinuxarm/wifi/``. Flash only the matching a-slot image trio, then
+reset/check slot retry state. Preserve userdata. Do not treat this
+candidate as working Wi-Fi until device-backed tests are recorded.

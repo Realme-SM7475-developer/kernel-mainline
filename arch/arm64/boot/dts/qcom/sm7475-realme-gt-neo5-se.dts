@@ -18,6 +18,7 @@
 #include "sm7475-realme-gt-neo5-se-battery.dtsi"
 #include "sm7475-realme-gt-neo5-se-touch.dtsi"
 #include "sm7475-realme-gt-neo5-se-gpu.dtsi"
+#include "sm7475-realme-gt-neo5-se-wifi.dtsi"
 
 / {
 	model = "realme GT Neo5 SE";
