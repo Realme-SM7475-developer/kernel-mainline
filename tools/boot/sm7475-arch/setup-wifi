@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0-only
+# Start the built-in ath11k driver after the persistent firmware is available.
+set -euo pipefail
+die() { echo "ERROR: $*" >&2; exit 1; }
+[[ $# == 0 && $EUID == 0 && $(uname -m) == aarch64 ]] ||
+    die 'Run setup-wifi without arguments as root on the phone'
+grep -q 'Ukee MTP, Senna' /proc/device-tree/model || die 'Wrong device'
+grep -qx '0914fed5-f7d5-62a2-c1f8-9f5e24598de7' /etc/sm7475-arch-root ||
+    die 'Wrong persistent root identity'
+[[ $(readlink /proc/1/exe) == /usr/lib/systemd/systemd ]] || die 'Native systemd required'
+for command in iw nmcli wpa_supplicant; do
+    command -v "$command" >/dev/null || die "Install $command first"
+done
+for file in amss.bin m3.bin board-2.bin regdb.bin; do
+    [[ -s /usr/lib/firmware/ath11k/WCN6855/hw2.1/$file ]] ||
+        die 'Install linux-firmware-atheros first'
+done
+[[ -s /usr/lib/firmware/regulatory.db ]] || die 'Install wireless-regdb first'
+
+install -d /usr/local/libexec /etc/NetworkManager/conf.d
+# Keep SSH and the debug link under systemd-networkd when NM starts.
+cat > /etc/NetworkManager/conf.d/90-sm7475-usb.conf <<'EOF'
+[device-sm7475-usb]
+match-device=mac:02:74:75:00:00:02
+managed=0
+EOF
+# The distribution board data exposes a shared 00:03:7f default address.
+# Give each installed system a stable local address instead of duplicating it.
+cat > /etc/NetworkManager/conf.d/90-sm7475-wifi.conf <<'EOF'
+[connection-sm7475-wifi]
+match-device=driver:ath11k_pci
+wifi.cloned-mac-address=stable-ssid
+EOF
+cat > /usr/local/libexec/sm7475-start-wifi <<'EOF'
+#!/bin/bash
+set -euo pipefail
+pci=/sys/bus/pci/devices/0000:01:00.0
+driver=/sys/bus/pci/drivers/ath11k_pci
+[[ $(cat "$pci/vendor") == 0x17cb && $(cat "$pci/device") == 0x1103 ]] || {
+    echo 'Expected Senna WCN6855 PCI endpoint is missing' >&2
+    exit 1
+}
+if [[ -L $pci/driver ]]; then
+    [[ $(readlink -f "$pci/driver") == "$driver" ]] || {
+        echo 'Wi-Fi endpoint is bound to another driver; leaving it unchanged' >&2
+        exit 1
+    }
+else
+    # The first built-in probe runs before switch_root and cannot find amss.bin.
+    # Retry only this unbound endpoint; never reset or detach a working adapter.
+    printf '%s' 0000:01:00.0 > "$driver/bind"
+fi
+for ((attempt = 0; attempt < 40; attempt++)); do
+    for phy in "$pci"/ieee80211/phy*; do
+        [[ -d $phy ]] || continue
+        # cfg80211 also attempted its initial regulatory.db load before root.
+        iw reg reload
+        echo 'WCN6855 initialized from the persistent Arch firmware directory'
+        exit 0
+    done
+    sleep 0.5
+done
+echo 'ath11k did not register a wireless PHY' >&2
+exit 1
+EOF
+chmod 0755 /usr/local/libexec/sm7475-start-wifi
+cat > /etc/systemd/system/sm7475-wifi.service <<'EOF'
+[Unit]
+Description=Initialize Senna Wi-Fi after mounting the Arch firmware directory
+After=local-fs.target
+Before=NetworkManager.service
+ConditionPathExists=/sys/bus/pci/devices/0000:01:00.0/vendor
+ConditionPathExists=/usr/lib/firmware/ath11k/WCN6855/hw2.1/amss.bin
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/sm7475-start-wifi
+RemainAfterExit=yes
+TimeoutStartSec=45
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable sm7475-wifi.service NetworkManager.service
+systemctl start sm7475-wifi.service NetworkManager.service
+nmcli general reload conf
+echo 'Wi-Fi startup enabled; choose your network in Plasma settings.'

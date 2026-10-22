@@ -803,13 +803,25 @@ confirmation from the earlier manual-module test. The finite capture
 ended naturally; temporary desktop inhibitors are gone and PowerDevil
 is restored. No diagnostic module is auto-loaded.
 
-QCA6490 Wi-Fi bring-up candidate
--------------------------------
+QCA6490 Wi-Fi bring-up
+---------------------
 
-As of 2026-10-22 this candidate has passed static checks only. It has not
-yet been booted on the phone; PCI enumeration, firmware startup, scanning
-and association remain unverified. The running device still uses the
-verified key/GPU release. A physical fastboot transition is pending.
+The 2026-10-22 first-test images boot on the phone. PCIe enumerates the
+17cb:1103 endpoint at 0000:01:00.0 over a Gen2 x1 link. ath11k identifies
+WCN6855 hw2.1, chip ID 0x12, board ID 0xff and SoC ID 0x400c1211. The
+distribution firmware starts and scanning finds both 2.4 and 5 GHz access
+points. Post-root initialization survives an ordinary reboot, and WPA2
+association, DHCP, DNS and HTTPS have succeeded on a 5 GHz network.
+The HTTPS request explicitly binds the WLAN interface, with a wireless
+source address, so USB sharing cannot account for that result. A weak
+initial signal produced retries and disconnects; range and sustained
+throughput are not established by this bring-up test. During a short
+connected run, ten gateway pings had no loss; five HTTPS requests had one
+eight-second connection timeout followed by four successes. A second
+ordinary reboot automatically restored the saved network and the same
+generated MAC address; WLAN DNS and HTTPS passed again. Systemd reported
+no failed units and the display session remained active. Neither 2.4 GHz
+association nor system suspend/resume has been tested.
 
 The stock Senna DT describes QCA6490 on PCIe0, using the WCN6855 PCI ID
 17cb:1103. The new board include describes the single-lane controller,
@@ -844,18 +856,45 @@ to the key release. DTBO content is unchanged apart from re-signing.
 The factory overlay has obsolete symbol exports that standard libfdt
 rejects. For offline checks only, those exports were removed from a copy;
 the resulting merge retains the new PCIe, PMU and GCC clock definitions.
-The actual flash input retains the original factory entries. This static
-merge does not establish bootloader or hardware success.
+The actual flash input retains the original factory entries. Hardware
+enumeration was verified separately after flashing the matching trio.
 
 Arch already has the distribution's WCN6855 hw2.0/hw2.1 firmware. The
 phone's own ``modem_a/image/qca6490`` files were also copied read-only to
 ``/root/sm7475-wifi-stock`` for comparison, without replacing the installed
-ath11k firmware. Select calibration data only after observing the actual
-QMI chip/board identity. Firmware and credentials must stay out of Git.
-NetworkManager is installed but was inactive at baseline; retain its
-existing USB unmanaged rule so networkd continues to provide USB access.
+ath11k firmware. The distribution board-2.bin contains an exact entry for
+PCI subsystem 17cb:0108, chip ID 18 and board ID 255, which is the identity
+observed on this phone. Its board payload is not identical to the archived
+stock files. This test does not establish stock-equivalent RF calibration
+or antenna performance. Firmware and credentials must stay out of Git.
+
+The built-in driver probes before switch_root, when amss.bin is not yet
+available. Run ``tools/boot/sm7475-arch/setup-wifi`` as root on the phone
+after installing ``linux-firmware-atheros``, ``wireless-regdb``, ``iw``,
+``wpa_supplicant`` and ``networkmanager``. It installs a post-root oneshot
+service before NetworkManager. The service retries only the unbound
+17cb:1103 endpoint and waits for its wireless PHY; an already bound
+adapter is left attached. It also reloads the signed regulatory database
+that cfg80211 could not access before root. No firmware is embedded in
+the small bootstrap ramdisk.
+
+The installer preserves USB as unmanaged by NetworkManager so networkd
+continues to provide SSH access. It enables NetworkManager; select the
+network and enter its password in Plasma settings. Credentials stay on
+the phone and must not enter source or diagnostic logs. The distribution
+board data exposes a shared 00:03:7f default MAC address; the installer
+selects NetworkManager stable-ssid addresses for ath11k connections to
+avoid using that shared address. The generated local address persists
+for the same network on this installation. See the NetworkManager
+``802-11-wireless.cloned-mac-address`` documentation for the policy.
+Existing profiles with an explicit address retain their own setting.
 
 Evidence, image hashes and the known-good key/GPU rollback hashes are in
 ``archlinuxarm/wifi/``. Flash only the matching a-slot image trio, then
-reset/check slot retry state. Preserve userdata. Do not treat this
-candidate as working Wi-Fi until device-backed tests are recorded.
+reset/check slot retry state. Preserve userdata. The final verified boot
+ID is ``46983792-67cf-4fe0-9ca3-b8cb786ed951``; evidence includes
+``final-reboot-validation.json``, ``firmware-selection.json``,
+``wlan-stability.jsonl`` and ``gateway-check.txt``. Early amss.bin errors
+remain expected with this bootstrap; the post-root service must finish
+successfully and register the PHY. Old display-stream SMMU faults before
+MDSS reset remain observable; no Wi-Fi stream 0x1c01 fault was observed.
