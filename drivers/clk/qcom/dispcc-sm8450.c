@@ -618,6 +618,15 @@ static struct clk_rcg2 disp_cc_mdss_mdp_clk_src = {
 	},
 };
 
+/* Ukee hands over an active display with its MDP parent still in use. */
+static const struct clk_init_data ukee_mdp_clk_init = {
+	.name = "disp_cc_mdss_mdp_clk_src",
+	.parent_data = disp_cc_parent_data_5,
+	.num_parents = ARRAY_SIZE(disp_cc_parent_data_5),
+	.flags = CLK_SET_RATE_PARENT,
+	.ops = &clk_rcg2_shared_no_init_park_ops,
+};
+
 static struct clk_rcg2 disp_cc_mdss_pclk0_clk_src = {
 	.cmd_rcgr = 0x80bc,
 	.mnd_width = 8,
@@ -1816,6 +1825,13 @@ static int disp_cc_sm8450_probe(struct platform_device *pdev)
 	}
 
 	if (of_device_is_compatible(pdev->dev.of_node, "qcom,sm8475-dispcc")) {
+		/* Keep the boot parent's configuration until the display takes over.
+		 * Initial parking on Ukee times out before the MDSS reset sequence.
+		 * Normal enable, rate changes and disable still use the shared ops.
+		 */
+		if (of_machine_is_compatible("qcom,ukee"))
+			disp_cc_mdss_mdp_clk_src.clkr.hw.init = &ukee_mdp_clk_init;
+
 		/* Update DISPCC PLL0 */
 		disp_cc_pll0.regs = clk_alpha_pll_regs[CLK_ALPHA_PLL_TYPE_LUCID_OLE];
 		disp_cc_pll0.clkr.hw.init = &sm8475_disp_cc_pll0_init;

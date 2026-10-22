@@ -19,6 +19,7 @@
 #include "sm7475-realme-gt-neo5-se-touch.dtsi"
 #include "sm7475-realme-gt-neo5-se-gpu.dtsi"
 #include "sm7475-realme-gt-neo5-se-wifi.dtsi"
+#include "sm7475-realme-gt-neo5-se-thermal.dtsi"
 
 / {
 	model = "realme GT Neo5 SE";
@@ -297,4 +298,25 @@
 		bias-pull-down;
 	};
 
+};
+
+/* The factory overlay also adds full pm8010@8/@9 nodes. These empty
+ * aliases use the same SIDs and must not instantiate a second device.
+ */
+&spmi_bus {
+	/* Firmware's PMIC inventory has PMR735A, no PMR735B, and one PM8010.
+	 * The responding PM8010 is SID8; SID5/SID9 are unpopulated on Senna.
+	 */
+	qcom,pmr735b@5 {
+		status = "disabled";
+	};
+	qcom,pm8010@9 {
+		status = "disabled";
+	};
+	qcom,pm8010i@8 {
+		status = "disabled";
+	};
+	qcom,pm8010j@9 {
+		status = "disabled";
+	};
 };

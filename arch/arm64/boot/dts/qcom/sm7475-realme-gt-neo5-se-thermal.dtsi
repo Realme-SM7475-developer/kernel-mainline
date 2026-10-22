@@ -1,0 +1,469 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-3-Clause)
+/* Senna EPSS and TSENS resources verified against this phone's stock DT. */
+#include <dt-bindings/thermal/thermal.h>
+
+&soc {
+	mainline_cpufreq_hw: cpufreq@17d91000 {
+		compatible = "qcom,sm8450-cpufreq-epss", "qcom,cpufreq-epss";
+		reg = <0x17d91000 0x1000>, <0x17d92000 0x1000>,
+		      <0x17d93000 0x1000>;
+		reg-names = "freq-domain0", "freq-domain1", "freq-domain2";
+		clocks = <&rpmhcc RPMH_CXO_CLK>, <&gcc GCC_GPLL0>;
+		clock-names = "xo", "alternate";
+		interrupts = <GIC_SPI 30 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 31 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 19 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "dcvsh-irq-0", "dcvsh-irq-1", "dcvsh-irq-2";
+		#freq-domain-cells = <1>;
+		#clock-cells = <1>;
+	};
+
+	mainline_tsens0: thermal-sensor@c263000 {
+		compatible = "qcom,sm8450-tsens", "qcom,tsens-v2";
+		reg = <0x0c263000 0x1000>, <0x0c222000 0x1000>;
+		#qcom,sensors = <16>;
+		interrupts = <GIC_SPI 506 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 508 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "uplow", "critical";
+		#thermal-sensor-cells = <1>;
+	};
+
+	mainline_tsens1: thermal-sensor@c265000 {
+		compatible = "qcom,sm8450-tsens", "qcom,tsens-v2";
+		reg = <0x0c265000 0x1000>, <0x0c223000 0x1000>;
+		#qcom,sensors = <16>;
+		interrupts = <GIC_SPI 507 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 509 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-names = "uplow", "critical";
+		#thermal-sensor-cells = <1>;
+	};
+};
+
+&cpu0 {
+	qcom,freq-domain = <&mainline_cpufreq_hw 0>;
+	clocks = <&mainline_cpufreq_hw 0>;
+	#cooling-cells = <2>;
+};
+
+&cpu1 {
+	qcom,freq-domain = <&mainline_cpufreq_hw 0>;
+	clocks = <&mainline_cpufreq_hw 0>;
+	#cooling-cells = <2>;
+};
+
+&cpu2 {
+	qcom,freq-domain = <&mainline_cpufreq_hw 0>;
+	clocks = <&mainline_cpufreq_hw 0>;
+	#cooling-cells = <2>;
+};
+
+&cpu3 {
+	qcom,freq-domain = <&mainline_cpufreq_hw 0>;
+	clocks = <&mainline_cpufreq_hw 0>;
+	#cooling-cells = <2>;
+};
+
+&cpu4 {
+	qcom,freq-domain = <&mainline_cpufreq_hw 1>;
+	clocks = <&mainline_cpufreq_hw 1>;
+	#cooling-cells = <2>;
+};
+
+&cpu5 {
+	qcom,freq-domain = <&mainline_cpufreq_hw 1>;
+	clocks = <&mainline_cpufreq_hw 1>;
+	#cooling-cells = <2>;
+};
+
+&cpu6 {
+	qcom,freq-domain = <&mainline_cpufreq_hw 1>;
+	clocks = <&mainline_cpufreq_hw 1>;
+	#cooling-cells = <2>;
+};
+
+&cpu7 {
+	qcom,freq-domain = <&mainline_cpufreq_hw 2>;
+	clocks = <&mainline_cpufreq_hw 2>;
+	#cooling-cells = <2>;
+};
+
+/ {
+	/* The factory thermal_zones label remains on its overlay sink. */
+	thermal-zones {
+		cpu0-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens1 1>;
+
+			trips {
+				cpu0_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu0_alert>;
+					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu1-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens1 2>;
+
+			trips {
+				cpu1_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu1_alert>;
+					cooling-device = <&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu2-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens1 3>;
+
+			trips {
+				cpu2_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu2_alert>;
+					cooling-device = <&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu3-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens1 4>;
+
+			trips {
+				cpu3_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu3_alert>;
+					cooling-device = <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu4-top-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens0 5>;
+
+			trips {
+				cpu4_top_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu4_top_alert>;
+					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu4-bottom-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens0 6>;
+
+			trips {
+				cpu4_bottom_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu4_bottom_alert>;
+					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu5-top-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens0 7>;
+
+			trips {
+				cpu5_top_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu5_top_alert>;
+					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu5-bottom-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens0 8>;
+
+			trips {
+				cpu5_bottom_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu5_bottom_alert>;
+					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu6-top-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens0 9>;
+
+			trips {
+				cpu6_top_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu6_top_alert>;
+					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu6-bottom-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens0 10>;
+
+			trips {
+				cpu6_bottom_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu6_bottom_alert>;
+					cooling-device = <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu7-top-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens0 11>;
+
+			trips {
+				cpu7_top_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu7_top_alert>;
+					cooling-device = <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu7-middle-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens0 12>;
+
+			trips {
+				cpu7_middle_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu7_middle_alert>;
+					cooling-device = <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		cpu7-bottom-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens0 13>;
+
+			trips {
+				cpu7_bottom_alert: trip-point {
+					temperature = <90000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&cpu7_bottom_alert>;
+					cooling-device = <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		gpu-0-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens0 14>;
+
+			trips {
+				gpu_0_alert: trip-point {
+					temperature = <85000>;
+					hysteresis = <1000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&gpu_0_alert>;
+					cooling-device = <&mainline_gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+		gpu-1-thermal {
+			polling-delay-passive = <100>;
+			polling-delay = <1000>;
+			thermal-sensors = <&mainline_tsens0 15>;
+
+			trips {
+				gpu_1_alert: trip-point {
+					temperature = <85000>;
+					hysteresis = <1000>;
+					type = "passive";
+				};
+				critical {
+					temperature = <110000>;
+					hysteresis = <1000>;
+					type = "critical";
+				};
+			};
+
+			cooling-maps {
+				map {
+					trip = <&gpu_1_alert>;
+					cooling-device = <&mainline_gpu THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+	};
+};

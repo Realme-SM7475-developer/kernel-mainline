@@ -975,3 +975,81 @@ build, so absence of their reports is not proof that latent defects do
 not exist. System suspend, long full-load runs, RF qualification and
 charging/thermal protection remain unverified. Prioritize CPU frequency
 and die thermal/cooling integration before expanding sustained stress.
+
+CPU frequency, thermal, clock and FUSE repair
+--------------------------------------------
+
+The first repair trio, ``out-stability-20261022``, booted successfully as
+``496f7f44-d157-4c96-afa5-ef598c37d68c``. The user confirmed normal display
+and touch. CPU policies, die thermal zones, FUSE and the document portal
+are registered; the MDP clock warning and duplicate PMIC registration
+errors disappeared. The follow-up ``out-stability-release-20261022`` uses
+the same Image and additionally disables unpopulated PMIC nodes. Its
+hardware boot and ordinary restart checks are pending.
+
+The board include uses EPSS at 0x17d91000/0x17d92000/0x17d93000 and TSENS
+TM/SROT windows 0xc263000/0xc222000 and 0xc265000/0xc223000. Addresses,
+interrupts, frequency domains and sensor wiring were compared with this
+phone's factory tree. EPSS and TSENS use the shared SM8450-compatible IP
+layouts. Private mainline labels keep factory overlays away from these
+controller definitions. No hand-written voltage or frequency table is
+installed: the cpufreq driver reads the firmware-programmed hardware LUT.
+
+CPUs 0-3, 4-6 and 7 use domains 0, 1 and 2. Fifteen thermal zones cover
+four little cores, the six middle-core sensors, three prime-core sensors
+and two GPU sensors. Passive and critical thresholds follow the upstream
+SM8450 defaults: CPU passive 90 C (2 C hysteresis), GPU passive 85 C
+(1 C hysteresis), and critical 110 C (1 C hysteresis).
+Cooling maps bind CPU sensors to their frequency domain and GPU sensors
+to the existing devfreq cooling device. Polling complements TSENS IRQs.
+Live TSENS readings are plausible and vary with load. All three CPU
+policies were forced briefly to their lowest and middle LUT entries,
+then restored. Register-reported frequencies and SHA256 timings changed
+accordingly. The LUT ranges are 300-1804.8 MHz (CPUs 0-3),
+633.6-2496 MHz (4-6), and 787.2-2918.4 MHz (7).
+
+Each CPU-domain cooling map and the GPU cooling map was tested with a
+short software temperature emulation below the critical threshold.
+Cooling state changed 0 to 1, then back to 0 after clearing emulation.
+All emulated temperatures were cleared and frequency limits restored.
+This checks the control path, not physical high-temperature protection
+or factory-equivalent sensor calibration.
+
+FUSE is built in so the document portal can access /dev/fuse without a
+matching module installation. The config delta from the Wi-Fi release is
+only ARM_QCOM_CPUFREQ_HW disabled to y and FUSE_FS m to y. Required thermal
+and cooling options were already enabled. The board predeclares the two
+empty factory pm8010i@8/pm8010j@9 aliases as disabled, retaining the full
+pm8010@8/@9 descriptions. Their disabled state survives the offline
+factory overlay merge. A stock SoCinfo module built against this exact kernel was loaded only
+to read the firmware SMEM inventory, then unloaded. The inventory lists
+PMK8350, PM8350, PM8350C, PM8350B, PMR735A, PM8450 and one PM8010.
+Together with the responding SID8 PM8010 and failed SID5/SID9 probes,
+this identifies the unpopulated PMR735B and second PM8010 descriptions.
+The follow-up release marks pmr735b@5 and pm8010@9 disabled rather than
+hiding failures in the SPMI driver. No diagnostic module is auto-loaded.
+
+The full clean build, image AVB/payload checks, source/cache comparison,
+selected cpufreq/TSENS/thermal-zone schemas and thermal include checkpatch
+passed. The TSENS schema check requires its thermal-sensor and nvmem
+schema dependencies; an isolated invocation without them is not a valid
+failure of the board description. Offline merging still sanitizes only
+obsolete symbol exports in a copy of the factory overlay. Flash entries
+are unchanged. Vendor header, ramdisk, table, bootconfig and userdata
+bootstrap match the working Wi-Fi release byte for byte. Panel, GPU, touch, keys and command line remain unchanged. The
+Ukee-specific MDP clock source now uses the existing shared no-init-park
+operations, retaining the boot parent during registration while keeping
+normal rate/enable/disable handling. This follows the same approach as
+upstream dispcc-eliza commit 2ef00630c5c0, with scope restricted to Ukee.
+The MDP update warning disappeared on the first repair boot and display
+operation was confirmed. The MDSS clock-before-reset order is unchanged.
+
+The working ``out-wifi-20261022`` trio has been rehashed as rollback.
+Preserve userdata and flash only the matching candidate trio. Evidence is
+under ``archlinuxarm/stability-fix-20261022/``. One pre-reset SMMU display-stream fault and the CPU feature taint remain.
+The prior Plasma network-component crashes are separate userspace work.
+The first repair boot also passed one 64 MiB memtester iteration, a
+64 MiB O_DIRECT ext4 round trip and native/Zink GPU readbacks in about
+40 seconds. Die temperature peaked at 49.5 C, battery at 33.7 C, and no
+new kernel message appeared during that run. This is still a bounded
+check rather than long-load or whole-system suspend qualification.
